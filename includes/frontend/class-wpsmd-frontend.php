@@ -89,13 +89,25 @@ class WPSMD_Frontend {
                 $image_id = get_post_thumbnail_id( $post_id );
                 $image_url = wp_get_attachment_image_url( $image_id, 'full' );
 
-                // Ensure wp_get_attachment_image_meta() is available
+                // Ensure wp_get_attachment_image_meta() is available or provide a fallback.
                 if ( ! function_exists( 'wp_get_attachment_image_meta' ) ) {
-                    require_once ABSPATH . 'wp-admin/includes/image.php';
+                    if ( is_admin() || ( defined( 'DOING_AJAX' ) && DOING_AJAX ) ) {
+                        // Only attempt to include if in admin, AJAX, or other safe contexts.
+                        require_once ABSPATH . 'wp-admin/includes/image.php';
+                    }
                 }
 
-                $image_meta = wp_get_attachment_image_meta( $image_id );
-                if ( $image_url && $image_meta ) {
+                // After attempting to include, check again or use a fallback.
+                if ( function_exists( 'wp_get_attachment_image_meta' ) ) {
+                    $image_meta = wp_get_attachment_image_meta( $image_id );
+                } else {
+                    // Fallback if the function is still not available (e.g., frontend context where include failed or wasn't attempted).
+                    $image_meta = array( 'width' => 0, 'height' => 0 ); // Provide a minimal fallback.
+                    // Optionally log this situation:
+                    // error_log('WPSMD: wp_get_attachment_image_meta not available on frontend for image ID ' . $image_id);
+                }
+
+                if ( $image_url && !empty($image_meta) && !empty($image_meta['width']) ) { // Check width to ensure meta is somewhat valid
                     $schema['image'] = array(
                         '@type'  => 'ImageObject',
                         'url'    => $image_url,
