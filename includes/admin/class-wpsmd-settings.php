@@ -78,6 +78,14 @@ class WPSMD_Settings {
             'wpsmd_openai_settings_section' // Section
         );
 
+        add_settings_field(
+            'openai_model', // ID
+            __( 'OpenAI Model', 'wp-seo-meta-descriptions' ), // Title
+            array( $this, 'openai_model_callback' ), // Callback
+            'wpsmd-settings-admin', // Page
+            'wpsmd_openai_settings_section' // Section
+        );
+
         add_settings_section(
             'wpsmd_auto_generation_settings_section', // ID
             __( 'Auto Generation Settings', 'wp-seo-meta-descriptions' ), // Title
@@ -112,6 +120,15 @@ class WPSMD_Settings {
         if ( isset( $input['openai_api_key'] ) ) {
             $new_input['openai_api_key'] = sanitize_text_field( $input['openai_api_key'] );
         }
+        if ( isset( $input['openai_model'] ) ) {
+            // Basic sanitization, ensure it's one of the allowed models
+            $allowed_models = array( 'gpt-3.5-turbo', 'gpt-4', 'gpt-4-turbo-preview' ); // Add more as needed
+            if ( in_array( $input['openai_model'], $allowed_models, true ) ) {
+                $new_input['openai_model'] = $input['openai_model'];
+            } else {
+                $new_input['openai_model'] = 'gpt-3.5-turbo'; // Default if invalid
+            }
+        }
         $new_input['enable_auto_seo_title'] = isset( $input['enable_auto_seo_title'] ) ? 1 : 0;
         $new_input['enable_auto_seo_description'] = isset( $input['enable_auto_seo_description'] ) ? 1 : 0;
         return $new_input;
@@ -133,6 +150,31 @@ class WPSMD_Settings {
             isset( $this->options['openai_api_key'] ) ? esc_attr( $this->options['openai_api_key'] ) : ''
         );
         echo '<p class="description">' . __( 'Enter your OpenAI API key. This key will be used for AI-powered features.', 'wp-seo-meta-descriptions' ) . '</p>';
+    }
+
+    /**
+     * Get the settings option array and print one of its values for OpenAI Model.
+     */
+    public function openai_model_callback() {
+        $current_model = isset( $this->options['openai_model'] ) ? $this->options['openai_model'] : 'gpt-3.5-turbo';
+        $models = array(
+            'gpt-3.5-turbo' => __('GPT-3.5 Turbo (Recommended)', 'wp-seo-meta-descriptions'),
+            'gpt-4' => __('GPT-4 (Advanced)', 'wp-seo-meta-descriptions'),
+            'gpt-4-turbo-preview' => __('GPT-4 Turbo Preview (Latest)', 'wp-seo-meta-descriptions'),
+            // Add other models as they become available or relevant
+        );
+
+        echo '<select id="openai_model" name="wpsmd_options[openai_model]">';
+        foreach ( $models as $value => $label ) {
+            printf(
+                '<option value="%s" %s>%s</option>',
+                esc_attr( $value ),
+                selected( $current_model, $value, false ),
+                esc_html( $label )
+            );
+        }
+        echo '</select>';
+        echo '<p class="description">' . __( 'Select the OpenAI model to use for content generation. Different models have varying capabilities and costs.', 'wp-seo-meta-descriptions' ) . '</p>';
     }
 
     /**

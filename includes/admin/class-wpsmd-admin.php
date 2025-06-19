@@ -17,6 +17,108 @@ class WPSMD_Admin {
     public function __construct() {
         add_action( 'add_meta_boxes', array( $this, 'add_meta_box' ) );
         add_action( 'save_post', array( $this, 'save_seo_data' ) );
+        add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_scripts' ) );
+        add_action( 'wp_ajax_wpsmd_generate_seo_content', array( $this, 'ajax_generate_seo_content' ) );
+    }
+
+    /**
+     * Enqueue admin scripts and styles.
+     */
+    public function enqueue_admin_scripts( $hook ) {
+        // Only enqueue on post edit screens
+        if ( 'post.php' !== $hook && 'post-new.php' !== $hook ) {
+            return;
+        }
+        // In a real plugin, you would enqueue a separate JS file.
+        // For simplicity here, we'll add inline JS in the meta_box_callback.
+        // wp_enqueue_script( 'wpsmd-admin-js', plugin_dir_url( __FILE__ ) . '../../assets/js/admin.js', array( 'jquery' ), WPSMD_VERSION, true );
+        // wp_localize_script( 'wpsmd-admin-js', 'wpsmd_ajax', array( 'ajax_url' => admin_url( 'admin-ajax.php' ), 'nonce' => wp_create_nonce('wpsmd_ajax_nonce') ) );
+    }
+
+    /**
+     * AJAX handler for generating SEO content.
+     */
+    public function ajax_generate_seo_content() {
+        check_ajax_referer( 'wpsmd_ajax_nonce', 'nonce' );
+
+        $options = get_option( 'wpsmd_options' );
+        $api_key = isset( $options['openai_api_key'] ) ? $options['openai_api_key'] : '';
+        $selected_model = isset( $options['openai_model'] ) ? $options['openai_model'] : 'gpt-3.5-turbo'; // Default model
+
+        if ( empty( $api_key ) ) {
+            wp_send_json_error( array( 'message' => __( 'OpenAI API key is not set in settings.', 'wp-seo-meta-descriptions' ) ) );
+            return;
+        }
+
+        $post_id = isset( $_POST['post_id'] ) ? intval( $_POST['post_id'] ) : 0;
+        $content_type = isset( $_POST['content_type'] ) ? sanitize_text_field( $_POST['content_type'] ) : ''; // 'title', 'description', 'keywords'
+
+        if ( ! $post_id || ! $content_type ) {
+            wp_send_json_error( array( 'message' => __( 'Invalid request.', 'wp-seo-meta-descriptions' ) ) );
+            return;
+        }
+
+        $post_content = get_post_field( 'post_content', $post_id );
+        $post_title = get_the_title( $post_id );
+
+        if ( empty( $post_content ) && empty( $post_title ) ) {
+            wp_send_json_error( array( 'message' => __( 'Post content or title is empty.', 'wp-seo-meta-descriptions' ) ) );
+            return;
+        }
+
+        $generated_text = '';
+
+        if ( $content_type === 'description' ) {
+            $generated_text = $this->generate_openai_description( $post_content, $api_key, $selected_model );
+        } elseif ( $content_type === 'title' ) {
+            // Placeholder for title generation - similar to description but different prompt
+            $prompt = "Generate a concise and compelling SEO title (max 60 characters) for the following content (current title is '{$post_title}'):\n\n" . strip_tags( $post_content );
+            $response = wp_remote_post( 'https://api.openai.com/v1/chat/completions', array(
+                'method'    => 'POST',
+                'headers'   => array('Authorization' => 'Bearer ' . $api_key, 'Content-Type'  => 'application/json'),
+                'body'      => json_encode(array('model' => $selected_model, 'messages' => array(array('role' => 'user', 'content' => $prompt)), 'max_tokens' => 20, 'temperature' => 0.7)),
+                'timeout'   => 15
+            ));
+            if (is_wp_error($response)) {
+                $generated_text = $response;
+            } else {
+                $body = wp_remote_retrieve_body($response);
+                $data = json_decode($body, true);
+                if (isset($data['choices'][0]['message']['content'])) {
+                    $generated_text = trim($data['choices'][0]['message']['content']);
+                } else {
+                    $generated_text = new WP_Error('openai_title_error', 'Failed to generate title. Unexpected API response.');
+                }
+            }
+        } elseif ( $content_type === 'keywords' ) {
+            // Placeholder for keyword generation
+            $prompt = "Extract the 5 most relevant SEO keywords (comma separated) for the following content:\n\n" . strip_tags( $post_content );
+             $response = wp_remote_post( 'https://api.openai.com/v1/chat/completions', array(
+                'method'    => 'POST',
+                'headers'   => array('Authorization' => 'Bearer ' . $api_key, 'Content-Type'  => 'application/json'),
+                'body'      => json_encode(array('model' => $selected_model, 'messages' => array(array('role' => 'user', 'content' => $prompt)), 'max_tokens' => 30, 'temperature' => 0.5)),
+                'timeout'   => 15
+            ));
+            if (is_wp_error($response)) {
+                $generated_text = $response;
+            } else {
+                $body = wp_remote_retrieve_body($response);
+                $data = json_decode($body, true);
+                if (isset($data['choices'][0]['message']['content'])) {
+                    $generated_text = trim($data['choices'][0]['message']['content']);
+                } else {
+                    $generated_text = new WP_Error('openai_keywords_error', 'Failed to generate keywords. Unexpected API response.');
+                }
+            }
+        }
+
+        if ( is_wp_error( $generated_text ) ) {
+            wp_send_json_error( array( 'message' => $generated_text->get_error_message() ) );
+        } elseif ( ! empty( $generated_text ) ) {
+            wp_send_json_success( array( 'text' => $generated_text ) );
+        } else {
+            wp_send_json_error( array( 'message' => __( 'Failed to generate content or content was empty.', 'wp-seo-meta-descriptions' ) ) );
+        }
     }
 
     /**
@@ -53,21 +155,21 @@ class WPSMD_Admin {
         echo '<p>';
         echo '<label for="wpsmd_seo_title_field"><strong>' . __( 'SEO Title:', 'wp-seo-meta-descriptions' ) . '</strong></label><br />';
         echo '<input type="text" id="wpsmd_seo_title_field" name="wpsmd_seo_title_field" value="' . esc_attr( $seo_title ) . '" style="width:100%;" />';
-        echo '<button type="button" id="wpsmd_generate_title_btn" class="button">' . __( 'Generate with AI', 'wp-seo-meta-descriptions' ) . '</button>';
+        echo '<button type="button" id="wpsmd_generate_title_btn" class="button wpsmd-ai-generate-btn" data-type="title" data-target="wpsmd_seo_title_field">' . __( 'Generate with AI', 'wp-seo-meta-descriptions' ) . '</button>';
         echo '</p>';
 
         // Meta Description Field
         echo '<p>';
         echo '<label for="wpsmd_meta_description_field"><strong>' . __( 'Meta Description:', 'wp-seo-meta-descriptions' ) . '</strong></label><br />';
         echo '<textarea id="wpsmd_meta_description_field" name="wpsmd_meta_description_field" rows="4" style="width:100%;">' . esc_textarea( $meta_description ) . '</textarea>';
-        echo '<button type="button" id="wpsmd_generate_description_btn" class="button">' . __( 'Generate with AI', 'wp-seo-meta-descriptions' ) . '</button>';
+        echo '<button type="button" id="wpsmd_generate_description_btn" class="button wpsmd-ai-generate-btn" data-type="description" data-target="wpsmd_meta_description_field">' . __( 'Generate with AI', 'wp-seo-meta-descriptions' ) . '</button>';
         echo '</p>';
 
         // Keywords (placeholder for now, AI will populate this)
         echo '<p>';
         echo '<label for="wpsmd_keywords_field"><strong>' . __( 'Keywords:', 'wp-seo-meta-descriptions' ) . '</strong></label><br />';
         echo '<input type="text" id="wpsmd_keywords_field" name="wpsmd_keywords_field" readonly style="width:100%;" placeholder="'.__( 'Keywords will be generated by AI', 'wp-seo-meta-descriptions' ).'" />';
-        echo '<button type="button" id="wpsmd_find_keywords_btn" class="button">' . __( 'Find Keywords with AI', 'wp-seo-meta-descriptions' ) . '</button>';
+        echo '<button type="button" id="wpsmd_find_keywords_btn" class="button wpsmd-ai-generate-btn" data-type="keywords" data-target="wpsmd_keywords_field">' . __( 'Find Keywords with AI', 'wp-seo-meta-descriptions' ) . '</button>';
         echo '</p>';
 
         // Schema Type Selector
@@ -182,31 +284,79 @@ class WPSMD_Admin {
         echo '<p><label>' . __( 'Social Profiles & Other URLs (SameAs - comma separated):', 'wp-seo-meta-descriptions' ) . ' <textarea name="wpsmd_org_same_as" rows="3" style="width:100%;" placeholder="https://www.facebook.com/yourpage, https://www.twitter.com/yourprofile">' . esc_textarea( $org_same_as ) . '</textarea></label></p>';
         echo '</div>';
 
-        // JavaScript to toggle schema fields visibility
+        // JavaScript for AJAX and UI updates
         echo "<script type='text/javascript'>
             jQuery(document).ready(function($) {
+                // Schema fields toggle logic (existing)
                 function toggleSchemaFields() {
                     var selectedType = $('#wpsmd_schema_type_field').val();
                     $('#wpsmd_product_schema_fields').hide();
                     $('#wpsmd_recipe_schema_fields').hide();
                     $('#wpsmd_faq_schema_fields').hide();
-                    $('#wpsmd_organization_schema_fields').hide(); // Hide Organization fields by default
+                    $('#wpsmd_organization_schema_fields').hide();
                     if (selectedType === 'Product') {
                         $('#wpsmd_product_schema_fields').show();
                     } else if (selectedType === 'Recipe') {
                         $('#wpsmd_recipe_schema_fields').show();
-                    } else if (selectedType === 'DiscussionForumPosting') {
-                        // No specific extra fields for DiscussionForumPosting in this iteration, but a section could be added here.
                     } else if (selectedType === 'FAQPage') {
                         $('#wpsmd_faq_schema_fields').show();
                     } else if (selectedType === 'Organization') {
                         $('#wpsmd_organization_schema_fields').show();
                     }
                 }
-                toggleSchemaFields(); // Initial call
+                toggleSchemaFields();
                 $('#wpsmd_schema_type_field').on('change', toggleSchemaFields);
+
+                // AI Generation Button Click Handler
+                $('.wpsmd-ai-generate-btn').on('click', function() {
+                    var \$button = $(this);
+                    var contentType = \$button.data('type'); // 'title', 'description', 'keywords'
+                    var \$targetField = $('#' + \$button.data('target'));
+                    var originalButtonText = \$button.html();
+
+                    \$button.html('" . __( 'Generating...', 'wp-seo-meta-descriptions' ) . "').prop('disabled', true);
+                    \$targetField.prop('disabled', true);
+
+                    // Remove any existing notices
+                    \$('.wpsmd-notice').remove();
+
+                    $.ajax({
+                        url: ajaxurl, // WordPress AJAX URL
+                        type: 'POST',
+                        data: {
+                            action: 'wpsmd_generate_seo_content',
+                            nonce: '" . wp_create_nonce('wpsmd_ajax_nonce') . "',
+                            post_id: '" . $post->ID . "',
+                            content_type: contentType
+                        },
+                        success: function(response) {
+                            if (response.success) {
+                                \$targetField.val(response.data.text);
+                                \$button.after('<div class=\"notice notice-success is-dismissible wpsmd-notice\"><p>' + contentType.charAt(0).toUpperCase() + contentType.slice(1) + ' " . __( 'generated successfully!', 'wp-seo-meta-descriptions' ) . "</p></div>');
+                            } else {
+                                var errorMessage = response.data && response.data.message ? response.data.message : '" . __( 'An unknown error occurred.', 'wp-seo-meta-descriptions' ) . "';
+                                \$button.after('<div class=\"notice notice-error is-dismissible wpsmd-notice\"><p><strong>Error:</strong> ' + errorMessage + '<br><small>" . __( 'Please check your OpenAI API key in settings, ensure the API has credits, and try again. If the issue persists, the content might be too long or the API service might be temporarily unavailable.', 'wp-seo-meta-descriptions' ) . "</small></p></div>');
+                            }
+                        },
+                        error: function(jqXHR, textStatus, errorThrown) {
+                             var errorMessage = errorThrown || textStatus;
+                             \$button.after('<div class=\"notice notice-error is-dismissible wpsmd-notice\"><p><strong>AJAX Error:</strong> ' + errorMessage + '<br><small>" . __( 'Could not connect to the server. Please check your internet connection and try again.', 'wp-seo-meta-descriptions' ) . "</small></p></div>');
+                        },
+                        complete: function() {
+                            \$button.html(originalButtonText).prop('disabled', false);
+                            \$targetField.prop('disabled', false);
+                        }
+                    });
+                });
+
+                // Make notices dismissible
+                $('body').on('click', '.wpsmd-notice .notice-dismiss', function(){
+                    $(this).closest('.wpsmd-notice').remove();
+                });
             });
         </script>";
+        echo '<style>.wpsmd-ai-generate-btn { margin-left: 5px; }</style>'; // Basic styling for buttons
+
 
 
         // Open Graph Fields
@@ -266,43 +416,47 @@ class WPSMD_Admin {
      *
      * @param string $content The post content.
      * @param string $api_key The OpenAI API key.
-     * @return string The generated description or empty string.
+     * @param string $model The OpenAI model to use.
+     * @return string|WP_Error The generated description or WP_Error on failure.
      */
-    private function generate_openai_description( $content, $api_key ) {
-        // This is a placeholder for the actual OpenAI API call.
-        // You would use wp_remote_post() or a library like Guzzle here.
-        // Example prompt structure:
-        // $prompt = "Generate a concise and compelling meta description (max 160 characters) for the following content:\n\n" . strip_tags($content);
-        // 
-        // $response = wp_remote_post( 'https://api.openai.com/v1/completions', array(
-        // 'method'    => 'POST',
-        // 'headers'   => array(
-        // 'Authorization' => 'Bearer ' . $api_key,
-        // 'Content-Type'  => 'application/json',
-        // ),
-        // 'body'      => json_encode( array(
-        // 'model'       => 'text-davinci-003', // Or a newer/cheaper model
-        // 'prompt'      => $prompt,
-        // 'max_tokens'  => 60, // Adjust as needed for description length
-        // 'temperature' => 0.7,
-        // ) ),
-        // 'timeout'   => 15,
-        // ) );
-        // 
-        // if ( is_wp_error( $response ) ) {
-        // error_log( 'OpenAI API Error: ' . $response->get_error_message() );
-        // return '';
-        // }
-        // 
-        // $body = wp_remote_retrieve_body( $response );
-        // $data = json_decode( $body, true );
-        // 
-        // if ( isset( $data['choices'][0]['text'] ) ) {
-        // return trim( $data['choices'][0]['text'] );
-        // }
-        // 
-        // error_log( 'OpenAI API Unexpected Response: ' . $body );
-        return ''; // Return empty if generation fails
+    private function generate_openai_description( $content, $api_key, $model = 'gpt-3.5-turbo' ) {
+        $prompt = "Generate a concise and compelling meta description (max 160 characters) for the following content:\n\n" . strip_tags( $content );
+
+        $response = wp_remote_post( 'https://api.openai.com/v1/chat/completions', array(
+            'method'    => 'POST',
+            'headers'   => array(
+                'Authorization' => 'Bearer ' . $api_key,
+                'Content-Type'  => 'application/json',
+            ),
+            'body'      => json_encode( array(
+                'model'       => $model,
+                'messages'    => array( array('role' => 'user', 'content' => $prompt )),
+                'max_tokens'  => 70, // Adjusted for meta description length
+                'temperature' => 0.7,
+            ) ),
+            'timeout'   => 20, // Increased timeout
+        ) );
+
+        if ( is_wp_error( $response ) ) {
+            error_log( 'WPSMD OpenAI API Error: ' . $response->get_error_message() );
+            return new WP_Error('openai_api_error', 'OpenAI API Error: ' . $response->get_error_message());
+        }
+
+        $body = wp_remote_retrieve_body( $response );
+        $data = json_decode( $body, true );
+
+        if ( isset( $data['choices'][0]['message']['content'] ) ) {
+            return trim( $data['choices'][0]['message']['content'] );
+        }
+        
+        $error_message = 'OpenAI API Unexpected Response: '; 
+        if(isset($data['error']['message'])){
+            $error_message .= $data['error']['message'];
+        } else {
+            $error_message .= $body;
+        }
+        error_log( 'WPSMD ' . $error_message );
+        return new WP_Error('openai_response_error', $error_message);
     }
 
     public function save_seo_data( $post_id ) {
@@ -332,28 +486,33 @@ class WPSMD_Admin {
         }
 
         // Save Meta Description
-        $meta_description = isset( $_POST['wpsmd_meta_description_field'] ) ? sanitize_textarea_field( $_POST['wpsmd_meta_description_field'] ) : '';
+        $meta_description_input = isset( $_POST['wpsmd_meta_description_field'] ) ? sanitize_textarea_field( $_POST['wpsmd_meta_description_field'] ) : '';
 
-        if ( empty( $meta_description ) ) {
+        if ( empty( $meta_description_input ) ) {
             $options = get_option( 'wpsmd_options' );
+            $selected_model_for_save = isset( $options['openai_model'] ) ? $options['openai_model'] : 'gpt-3.5-turbo';
             if ( ! empty( $options['enable_auto_seo_description'] ) && ! empty( $options['openai_api_key'] ) ) {
-                // Attempt to auto-generate meta description
                 $post_content = get_post_field( 'post_content', $post_id );
                 if ( ! empty( $post_content ) ) {
-                    // Placeholder for OpenAI API call
-                    // $generated_description = $this->generate_openai_description( $post_content, $options['openai_api_key'] );
-                    // For now, let's simulate a generated description or use an excerpt
-                    $excerpt = wp_trim_words( $post_content, 25, '...' ); // Generate a simple excerpt
-                    if ( !empty($excerpt) ) {
-                        $meta_description = $excerpt; // Use excerpt as a fallback if OpenAI call fails or is not implemented
-                        // error_log('WPSMD: Auto-generated description (excerpt): ' . $meta_description);
+                    $generated_description = $this->generate_openai_description( $post_content, $options['openai_api_key'], $selected_model_for_save );
+                    if ( ! is_wp_error( $generated_description ) && ! empty( $generated_description ) ) {
+                        $meta_description_input = $generated_description;
+                        // error_log('WPSMD: Successfully auto-generated description (OpenAI): ' . $meta_description_input);
+                    } else {
+                        // Fallback to excerpt if OpenAI fails or returns error
+                        $meta_description_input = wp_trim_words( $post_content, 25, '...' );
+                        if(is_wp_error($generated_description)){
+                            // error_log('WPSMD: OpenAI generation failed: ' . $generated_description->get_error_message() . '. Fell back to excerpt.');
+                        } else {
+                            // error_log('WPSMD: OpenAI generation returned empty. Fell back to excerpt.');
+                        }
                     }
                 }
             }
         }
 
-        if ( ! empty( $meta_description ) ) {
-            update_post_meta( $post_id, '_wpsmd_meta_description', $meta_description );
+        if ( ! empty( $meta_description_input ) ) {
+            update_post_meta( $post_id, '_wpsmd_meta_description', $meta_description_input );
         } else {
             delete_post_meta( $post_id, '_wpsmd_meta_description' );
         }
