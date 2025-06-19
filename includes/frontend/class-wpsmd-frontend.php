@@ -88,6 +88,12 @@ class WPSMD_Frontend {
             if ( has_post_thumbnail( $post_id ) ) {
                 $image_id = get_post_thumbnail_id( $post_id );
                 $image_url = wp_get_attachment_image_url( $image_id, 'full' );
+
+                // Ensure wp_get_attachment_image_meta() is available
+                if ( ! function_exists( 'wp_get_attachment_image_meta' ) ) {
+                    require_once ABSPATH . 'wp-admin/includes/image.php';
+                }
+
                 $image_meta = wp_get_attachment_image_meta( $image_id );
                 if ( $image_url && $image_meta ) {
                     $schema['image'] = array(
