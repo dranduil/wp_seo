@@ -236,6 +236,8 @@ class WPSMD_Admin {
         $twitter_description = get_post_meta( $post->ID, '_wpsmd_twitter_description', true );
         $twitter_image = get_post_meta( $post->ID, '_wpsmd_twitter_image', true );
 
+        // OpenAI API Key is now managed globally, field removed from here.
+
         echo '<p>';
         echo '<label for="wpsmd_twitter_title_field"><strong>' . __( 'Twitter Title:', 'wp-seo-meta-descriptions' ) . '</strong></label><br />';
         echo '<input type="text" id="wpsmd_twitter_title_field" name="wpsmd_twitter_title_field" value="' . esc_attr( $twitter_title ) . '" style="width:100%;" placeholder="' . __( 'Defaults to Open Graph Title or SEO Title', 'wp-seo-meta-descriptions' ) . '" />';
@@ -251,12 +253,7 @@ class WPSMD_Admin {
         echo '<input type="text" id="wpsmd_twitter_image_field" name="wpsmd_twitter_image_field" value="' . esc_url( $twitter_image ) . '" style="width:100%;" placeholder="' . __( 'Defaults to Open Graph Image or Featured Image. Enter full URL.', 'wp-seo-meta-descriptions' ) . '" />';
         echo '</p>';
 
-        // OpenAI API Key Field
-        echo '<hr><p>';
-        echo '<label for="wpsmd_openai_api_key_field"><strong>' . __( 'OpenAI API Key:', 'wp-seo-meta-descriptions' ) . '</strong></label><br />';
-        echo '<input type="text" id="wpsmd_openai_api_key_field" name="wpsmd_openai_api_key_field" value="' . esc_attr( $openai_api_key ) . '" style="width:100%;" />';
-        echo '<small>' . __( 'Enter your OpenAI API key to enable AI features. This key is saved with this post/page.', 'wp-seo-meta-descriptions' ) . '</small>';
-        echo '</p>';
+        // OpenAI API Key Field - Moved to global settings page
     }
 
     /**
@@ -297,12 +294,8 @@ class WPSMD_Admin {
             delete_post_meta( $post_id, '_wpsmd_meta_description' );
         }
 
-        // Save OpenAI API Key
-        if ( isset( $_POST['wpsmd_openai_api_key_field'] ) ) {
-            update_post_meta( $post_id, '_wpsmd_openai_api_key', sanitize_text_field( $_POST['wpsmd_openai_api_key_field'] ) );
-        } else {
-            delete_post_meta( $post_id, '_wpsmd_openai_api_key' );
-        }
+        // Save OpenAI API Key - Moved to global settings, no longer saved per post
+        // delete_post_meta( $post_id, '_wpsmd_openai_api_key' ); // Optionally, remove old per-post keys if desired during a migration step, not here.
 
         // Save Open Graph Title
         if ( isset( $_POST['wpsmd_og_title_field'] ) ) {

@@ -24,6 +24,7 @@ define( 'WPSMD_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 
 // Include class files
 require_once WPSMD_PLUGIN_PATH . 'includes/admin/class-wpsmd-admin.php';
+require_once WPSMD_PLUGIN_PATH . 'includes/admin/class-wpsmd-settings.php'; // Added settings page
 require_once WPSMD_PLUGIN_PATH . 'includes/frontend/class-wpsmd-frontend.php';
 
 /**
