@@ -261,6 +261,50 @@ class WPSMD_Admin {
      *
      * @param int $post_id The ID of the post being saved.
      */
+    /**
+     * Placeholder for OpenAI API call to generate description.
+     *
+     * @param string $content The post content.
+     * @param string $api_key The OpenAI API key.
+     * @return string The generated description or empty string.
+     */
+    private function generate_openai_description( $content, $api_key ) {
+        // This is a placeholder for the actual OpenAI API call.
+        // You would use wp_remote_post() or a library like Guzzle here.
+        // Example prompt structure:
+        // $prompt = "Generate a concise and compelling meta description (max 160 characters) for the following content:\n\n" . strip_tags($content);
+        // 
+        // $response = wp_remote_post( 'https://api.openai.com/v1/completions', array(
+        // 'method'    => 'POST',
+        // 'headers'   => array(
+        // 'Authorization' => 'Bearer ' . $api_key,
+        // 'Content-Type'  => 'application/json',
+        // ),
+        // 'body'      => json_encode( array(
+        // 'model'       => 'text-davinci-003', // Or a newer/cheaper model
+        // 'prompt'      => $prompt,
+        // 'max_tokens'  => 60, // Adjust as needed for description length
+        // 'temperature' => 0.7,
+        // ) ),
+        // 'timeout'   => 15,
+        // ) );
+        // 
+        // if ( is_wp_error( $response ) ) {
+        // error_log( 'OpenAI API Error: ' . $response->get_error_message() );
+        // return '';
+        // }
+        // 
+        // $body = wp_remote_retrieve_body( $response );
+        // $data = json_decode( $body, true );
+        // 
+        // if ( isset( $data['choices'][0]['text'] ) ) {
+        // return trim( $data['choices'][0]['text'] );
+        // }
+        // 
+        // error_log( 'OpenAI API Unexpected Response: ' . $body );
+        return ''; // Return empty if generation fails
+    }
+
     public function save_seo_data( $post_id ) {
         if ( ! isset( $_POST['wpsmd_seo_nonce'] ) || ! wp_verify_nonce( $_POST['wpsmd_seo_nonce'], 'wpsmd_save_seo_data' ) ) {
             return;
@@ -288,8 +332,28 @@ class WPSMD_Admin {
         }
 
         // Save Meta Description
-        if ( isset( $_POST['wpsmd_meta_description_field'] ) ) {
-            update_post_meta( $post_id, '_wpsmd_meta_description', sanitize_textarea_field( $_POST['wpsmd_meta_description_field'] ) );
+        $meta_description = isset( $_POST['wpsmd_meta_description_field'] ) ? sanitize_textarea_field( $_POST['wpsmd_meta_description_field'] ) : '';
+
+        if ( empty( $meta_description ) ) {
+            $options = get_option( 'wpsmd_options' );
+            if ( ! empty( $options['enable_auto_seo_description'] ) && ! empty( $options['openai_api_key'] ) ) {
+                // Attempt to auto-generate meta description
+                $post_content = get_post_field( 'post_content', $post_id );
+                if ( ! empty( $post_content ) ) {
+                    // Placeholder for OpenAI API call
+                    // $generated_description = $this->generate_openai_description( $post_content, $options['openai_api_key'] );
+                    // For now, let's simulate a generated description or use an excerpt
+                    $excerpt = wp_trim_words( $post_content, 25, '...' ); // Generate a simple excerpt
+                    if ( !empty($excerpt) ) {
+                        $meta_description = $excerpt; // Use excerpt as a fallback if OpenAI call fails or is not implemented
+                        // error_log('WPSMD: Auto-generated description (excerpt): ' . $meta_description);
+                    }
+                }
+            }
+        }
+
+        if ( ! empty( $meta_description ) ) {
+            update_post_meta( $post_id, '_wpsmd_meta_description', $meta_description );
         } else {
             delete_post_meta( $post_id, '_wpsmd_meta_description' );
         }

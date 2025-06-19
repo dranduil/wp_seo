@@ -77,6 +77,29 @@ class WPSMD_Settings {
             'wpsmd-settings-admin', // Page
             'wpsmd_openai_settings_section' // Section
         );
+
+        add_settings_section(
+            'wpsmd_auto_generation_settings_section', // ID
+            __( 'Auto Generation Settings', 'wp-seo-meta-descriptions' ), // Title
+            array( $this, 'print_auto_generation_section_info' ), // Callback
+            'wpsmd-settings-admin' // Page
+        );
+
+        add_settings_field(
+            'enable_auto_seo_title', // ID
+            __( 'Enable Auto SEO Title', 'wp-seo-meta-descriptions' ), // Title
+            array( $this, 'enable_auto_seo_title_callback' ), // Callback
+            'wpsmd-settings-admin', // Page
+            'wpsmd_auto_generation_settings_section' // Section
+        );
+
+        add_settings_field(
+            'enable_auto_seo_description', // ID
+            __( 'Enable Auto SEO Description', 'wp-seo-meta-descriptions' ), // Title
+            array( $this, 'enable_auto_seo_description_callback' ), // Callback
+            'wpsmd-settings-admin', // Page
+            'wpsmd_auto_generation_settings_section' // Section
+        );
     }
 
     /**
@@ -89,6 +112,8 @@ class WPSMD_Settings {
         if ( isset( $input['openai_api_key'] ) ) {
             $new_input['openai_api_key'] = sanitize_text_field( $input['openai_api_key'] );
         }
+        $new_input['enable_auto_seo_title'] = isset( $input['enable_auto_seo_title'] ) ? 1 : 0;
+        $new_input['enable_auto_seo_description'] = isset( $input['enable_auto_seo_description'] ) ? 1 : 0;
         return $new_input;
     }
 
@@ -108,6 +133,35 @@ class WPSMD_Settings {
             isset( $this->options['openai_api_key'] ) ? esc_attr( $this->options['openai_api_key'] ) : ''
         );
         echo '<p class="description">' . __( 'Enter your OpenAI API key. This key will be used for AI-powered features.', 'wp-seo-meta-descriptions' ) . '</p>';
+    }
+
+    /**
+     * Print the Section text for Auto Generation.
+     */
+    public function print_auto_generation_section_info() {
+        print __( 'Configure automatic generation of SEO titles and descriptions:', 'wp-seo-meta-descriptions' );
+    }
+
+    /**
+     * Callback for Enable Auto SEO Title checkbox.
+     */
+    public function enable_auto_seo_title_callback() {
+        printf(
+            '<input type="checkbox" id="enable_auto_seo_title" name="wpsmd_options[enable_auto_seo_title]" value="1" %s />',
+            checked( 1, isset( $this->options['enable_auto_seo_title'] ) ? $this->options['enable_auto_seo_title'] : 0, false )
+        );
+        echo '<label for="enable_auto_seo_title"> ' . __( 'Automatically generate SEO titles if not manually set.', 'wp-seo-meta-descriptions' ) . '</label>';
+    }
+
+    /**
+     * Callback for Enable Auto SEO Description checkbox.
+     */
+    public function enable_auto_seo_description_callback() {
+        printf(
+            '<input type="checkbox" id="enable_auto_seo_description" name="wpsmd_options[enable_auto_seo_description]" value="1" %s />',
+            checked( 1, isset( $this->options['enable_auto_seo_description'] ) ? $this->options['enable_auto_seo_description'] : 0, false )
+        );
+        echo '<label for="enable_auto_seo_description"> ' . __( 'Automatically generate meta descriptions if not manually set (uses OpenAI if API key is provided and field is empty, otherwise generates from content).', 'wp-seo-meta-descriptions' ) . '</label>';
     }
 }
 

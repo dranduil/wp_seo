@@ -34,11 +34,26 @@ class WPSMD_Frontend {
                 return;
             }
 
-            $custom_meta_description = get_post_meta( $post_id, '_wpsmd_meta_description', true );
-            $description = ! empty( $custom_meta_description ) ? $custom_meta_description : wp_strip_all_tags( $post_obj->post_excerpt ? $post_obj->post_excerpt : mb_substr( wp_strip_all_tags( $post_obj->post_content ), 0, 160 ) );
-            
+            $wpsmd_options = get_option( 'wpsmd_options' );
+            $enable_auto_seo_title = isset( $wpsmd_options['enable_auto_seo_title'] ) ? (bool) $wpsmd_options['enable_auto_seo_title'] : false;
+            $enable_auto_seo_description = isset( $wpsmd_options['enable_auto_seo_description'] ) ? (bool) $wpsmd_options['enable_auto_seo_description'] : false;
+
             $custom_seo_title = get_post_meta( $post_id, '_wpsmd_seo_title', true );
-            $headline = !empty($custom_seo_title) ? esc_attr($custom_seo_title) : get_the_title( $post_id );
+            $headline = $custom_seo_title;
+            if ( empty( $headline ) && $enable_auto_seo_title ) {
+                $headline = get_the_title( $post_id );
+            } elseif (empty($headline)) {
+                $headline = get_the_title( $post_id ); // Default fallback if not auto and not set
+            }
+            $headline = esc_attr($headline);
+
+            $custom_meta_description = get_post_meta( $post_id, '_wpsmd_meta_description', true );
+            $description = $custom_meta_description;
+            if ( empty( $description ) && $enable_auto_seo_description ) {
+                $description = wp_strip_all_tags( $post_obj->post_excerpt ? $post_obj->post_excerpt : mb_substr( wp_strip_all_tags( $post_obj->post_content ), 0, 160 ) );
+            } elseif (empty($description)) {
+                 $description = wp_strip_all_tags( $post_obj->post_excerpt ? $post_obj->post_excerpt : mb_substr( wp_strip_all_tags( $post_obj->post_content ), 0, 160 ) ); // Default fallback
+            }
 
             $selected_schema_type = get_post_meta( $post_id, '_wpsmd_schema_type', true );
             if ( empty( $selected_schema_type ) ) {
@@ -335,12 +350,27 @@ class WPSMD_Frontend {
             }
 
             // SEO Title and Description (for fallbacks)
+            $wpsmd_options = get_option( 'wpsmd_options' );
+            $enable_auto_seo_title = isset( $wpsmd_options['enable_auto_seo_title'] ) ? (bool) $wpsmd_options['enable_auto_seo_title'] : false;
+            $enable_auto_seo_description = isset( $wpsmd_options['enable_auto_seo_description'] ) ? (bool) $wpsmd_options['enable_auto_seo_description'] : false;
+
             $custom_seo_title = get_post_meta( $post_id, '_wpsmd_seo_title', true );
-            $seo_title = !empty($custom_seo_title) ? esc_attr($custom_seo_title) : get_the_title( $post_id );
+            $seo_title = $custom_seo_title;
+            if ( empty( $seo_title ) && $enable_auto_seo_title ) {
+                $seo_title = get_the_title( $post_id );
+            } elseif (empty($seo_title)) {
+                $seo_title = get_the_title( $post_id ); // Default fallback
+            }
+            $seo_title = esc_attr($seo_title);
 
             $custom_meta_description = get_post_meta( $post_id, '_wpsmd_meta_description', true );
             $post_obj = get_post($post_id);
-            $meta_description = ! empty( $custom_meta_description ) ? $custom_meta_description : wp_strip_all_tags( $post_obj->post_excerpt ? $post_obj->post_excerpt : mb_substr( wp_strip_all_tags( $post_obj->post_content ), 0, 160 ) );
+            $meta_description = $custom_meta_description;
+            if ( empty( $meta_description ) && $enable_auto_seo_description ) {
+                $meta_description = wp_strip_all_tags( $post_obj->post_excerpt ? $post_obj->post_excerpt : mb_substr( wp_strip_all_tags( $post_obj->post_content ), 0, 160 ) );
+            } elseif (empty($meta_description)) {
+                $meta_description = wp_strip_all_tags( $post_obj->post_excerpt ? $post_obj->post_excerpt : mb_substr( wp_strip_all_tags( $post_obj->post_content ), 0, 160 ) ); // Default fallback
+            }
             $meta_description = esc_attr( $meta_description );
 
             // Featured image (for fallbacks)
