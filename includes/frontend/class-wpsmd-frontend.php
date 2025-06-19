@@ -189,14 +189,36 @@ class WPSMD_Frontend {
                  if ( has_post_thumbnail( $post_id ) && !isset($schema['image'])) {
                     $image_id = get_post_thumbnail_id( $post_id );
                     $image_url = wp_get_attachment_image_url( $image_id, 'full' );
-                    $image_meta = wp_get_attachment_image_meta( $image_id );
-                    if ( $image_url && $image_meta ) {
+                    $attachment_meta = null; // Initialize
+
+                    // Ensure wp_get_attachment_metadata is available
+                    if ( ! function_exists( 'wp_get_attachment_metadata' ) ) {
+                        // This function is defined in wp-admin/includes/image.php, which might not be loaded on frontend.
+                        // Conditionally load it if we are in an admin context or AJAX request, or if explicitly needed.
+                        if ( ( defined( 'WP_ADMIN' ) && WP_ADMIN ) || ( defined( 'DOING_AJAX' ) && DOING_AJAX ) ) {
+                            if ( defined( 'ABSPATH' ) ) {
+                                require_once ABSPATH . 'wp-admin/includes/image.php';
+                            }
+                        }
+                    }
+
+                    if ( function_exists( 'wp_get_attachment_metadata' ) ) {
+                        $attachment_meta = wp_get_attachment_metadata( $image_id );
+                    } else {
+                        // Fallback if function is still not available (e.g. image.php failed to load or function removed by other means)
+                        $attachment_meta = array( 'width' => 0, 'height' => 0 ); // Mimic structure for width/height
+                    }
+
+                    // wp_get_attachment_metadata returns an array with 'width' and 'height' at the top level.
+                    if ( $image_url && $attachment_meta && isset($attachment_meta['width']) && $attachment_meta['width'] > 0 && isset($attachment_meta['height']) && $attachment_meta['height'] > 0 ) {
                         $schema['image'] = array(
                             '@type'  => 'ImageObject',
                             'url'    => $image_url,
-                            'width'  => $image_meta['width'],
-                            'height' => $image_meta['height'],
+                            'width'  => $attachment_meta['width'],
+                            'height' => $attachment_meta['height'],
                         );
+                    } elseif ( $image_url ) { // If meta fails but URL exists, provide URL only as a simpler fallback
+                        $schema['image'] = $image_url;
                     }
                 }
             }
