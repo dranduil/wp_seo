@@ -39,19 +39,30 @@
                 }
             },
             error: function(jqXHR, textStatus, errorThrown) {
-                console.error('WPSMD: AJAX error details:', {
+                console.error('WPSMD: Disconnect error details:', {
                     status: jqXHR.status,
                     statusText: jqXHR.statusText,
                     responseText: jqXHR.responseText,
                     textStatus: textStatus,
                     errorThrown: errorThrown,
                     requestData: {
-                        action: 'wpsmd_verify_gsc',
-                        nonce: wpsmdAnalytics.nonce,
-                        code: authCode
+                        action: 'wpsmd_disconnect_gsc',
+                        nonce: wpsmdAnalytics.nonce
                     }
                 });
-                showNotice(wpsmdAnalytics.i18n.verifyError + ': ' + (jqXHR.responseText || textStatus), 'error');
+
+                let errorMessage = wpsmdAnalytics.i18n.verifyError;
+                
+                try {
+                    const errorResponse = JSON.parse(jqXHR.responseText);
+                    if (errorResponse.data && errorResponse.data.message) {
+                        errorMessage = errorResponse.data.message;
+                    }
+                } catch (e) {
+                    errorMessage += textStatus ? ': ' + textStatus : '';
+                }
+
+                showNotice(errorMessage, 'error');
             },
             complete: function() {
                 $button.prop('disabled', false).text(originalText);
@@ -84,18 +95,23 @@
             console.log('WPSMD: Handling OAuth callback with code and state');
         }
 
+        // Log request parameters for debugging
+        const requestData = {
+            action: 'wpsmd_verify_gsc',
+            nonce: wpsmdAnalytics.nonce,
+            code: authCode,
+            state: state
+        };
+        console.log('WPSMD: Sending request with data:', requestData);
+
         $.ajax({
             url: wpsmdAnalytics.ajax_url,
             type: 'POST',
-            data: {
-                action: 'wpsmd_verify_gsc',
-                nonce: wpsmdAnalytics.nonce,
-                code: authCode,
-                state: state
-            },
+            data: requestData,
             success: function(response) {
                 console.log('WPSMD: Verify response:', response);
-                // Handle empty, '0', or invalid response
+                
+                // Handle empty or invalid response
                 if (!response || response === '0' || response === 0) {
                     console.error('WPSMD: Empty or zero response received');
                     showNotice(wpsmdAnalytics.i18n.verifyError + ': Invalid server response', 'error');
@@ -103,22 +119,33 @@
                     return;
                 }
                 
-                // Validate response structure
-                if (typeof response !== 'object') {
+                // Validate and parse response if needed
+                if (typeof response === 'string') {
                     try {
                         response = JSON.parse(response);
+                        console.log('WPSMD: Parsed JSON response:', response);
                     } catch (e) {
-                        console.error('WPSMD: Invalid response format:', response);
+                        console.error('WPSMD: Failed to parse response:', e);
                         showNotice(wpsmdAnalytics.i18n.verifyError + ': Invalid response format', 'error');
                         $button.prop('disabled', false).text(originalText);
                         return;
                     }
                 }
+
+                // Ensure response is an object
+                if (!response || typeof response !== 'object') {
+                    console.error('WPSMD: Invalid response type:', typeof response);
+                    showNotice(wpsmdAnalytics.i18n.verifyError + ': Invalid response format', 'error');
+                    $button.prop('disabled', false).text(originalText);
+                    return;
+                }
                 
                 // Log full response for debugging
                 console.log('WPSMD: Full response:', response);
+                
                 if (response.success) {
-                    if (response.data.auth_url) {
+                    // Handle successful response with auth_url (initial auth)
+                    if (response.data && response.data.auth_url) {
                         console.log('WPSMD: Redirecting to auth URL:', response.data.auth_url);
                         // Store the current page URL before redirecting
                         sessionStorage.setItem('wpsmd_redirect_after_auth', window.location.href);
@@ -126,24 +153,29 @@
                         return;
                     }
                     
-                    if (response.data.message) {
+                    // Handle successful response with message
+                    if (response.data && response.data.message) {
                         showNotice(response.data.message, 'success');
                     }
                     
-                    if (response.data.redirect_url) {
+                    // Handle successful response with redirect_url
+                    if (response.data && response.data.redirect_url) {
                         console.log('WPSMD: Redirecting to:', response.data.redirect_url);
                         window.location.href = response.data.redirect_url;
                         return;
                     }
                     
-                    if (authCode) {
+                    // Handle successful response requiring reload
+                    if (response.data && response.data.reload) {
                         console.log('WPSMD: Reloading page to refresh state');
-                        // Remove code from URL and reload to refresh the page state
-                        const newUrl = window.location.href.split('?')[0];
-                        window.location.href = newUrl;
-                    } else {
-                        console.log('WPSMD: No redirect/reload needed');
-                        location.reload();
+                        if (authCode) {
+                            // Remove code from URL and reload
+                            const newUrl = window.location.href.split('?')[0];
+                            window.location.href = newUrl;
+                        } else {
+                            window.location.reload();
+                        }
+                        return;
                     }
                 } else {
                     // Handle error response
@@ -161,13 +193,42 @@
                 }
             },
             error: function(jqXHR, textStatus, errorThrown) {
-                console.error('WPSMD: AJAX error:', textStatus, errorThrown);
-                console.error('WPSMD: Response:', jqXHR.responseText);
-                var errorMessage = wpsmdAnalytics.i18n.verifyError;
-                if (textStatus) {
-                    errorMessage += ': ' + textStatus;
+                console.error('WPSMD: AJAX error details:', {
+                    status: jqXHR.status,
+                    statusText: jqXHR.statusText,
+                    responseText: jqXHR.responseText,
+                    textStatus: textStatus,
+                    errorThrown: errorThrown
+                });
+
+                let errorMessage = wpsmdAnalytics.i18n.verifyError;
+                
+                // Try to parse response text for more details
+                try {
+                    const errorResponse = JSON.parse(jqXHR.responseText);
+                    if (errorResponse.data && errorResponse.data.message) {
+                        errorMessage = errorResponse.data.message;
+                    }
+                } catch (e) {
+                    // Handle specific error cases
+                    if (jqXHR.status === 400) {
+                        errorMessage = 'OAuth Configuration Error: Please verify the following in Google Cloud Console:\n' +
+                            '1. The authorized redirect URI matches exactly: ' + window.location.origin + '/wp-admin/admin-ajax.php\n' +
+                            '2. Client ID and Client Secret are correctly configured\n' +
+                            '3. OAuth consent screen is properly set up\n' +
+                            '4. The application is not in testing mode, or your account is added as a test user';
+                    } else {
+                        errorMessage += textStatus ? ': ' + textStatus : '';
+                    }
                 }
+
                 showNotice(errorMessage, 'error');
+                
+                // If this was an OAuth callback, clean up the URL
+                if (authCode) {
+                    const newUrl = window.location.href.split('?')[0];
+                    window.history.replaceState({}, document.title, newUrl);
+                }
             },
             complete: function() {
                 $button.prop('disabled', false).text(originalText);
@@ -317,10 +378,17 @@
 
     // Show admin notice
     function showNotice(message, type) {
-        const $notice = $('<div class="notice notice-' + type + ' is-dismissible"><p>' + message + '</p></div>')
+        // Convert newlines to <br> tags for proper HTML display
+        const formattedMessage = message.replace(/\n/g, '<br>');
+        const $notice = $('<div class="notice notice-' + type + ' is-dismissible"><p>' + formattedMessage + '</p></div>')
             .hide()
             .insertAfter('.wrap h1')
             .slideDown();
+
+        // Ensure the notice is visible by scrolling to it
+        $('html, body').animate({
+            scrollTop: $notice.offset().top - 50
+        }, 500);
 
         setTimeout(function() {
             $notice.slideUp(function() {
