@@ -211,14 +211,28 @@ class WPSMD_Analytics {
             $client->setAccessType('offline');
             $client->setPrompt('consent');
             
-            // Generate state parameter for CSRF protection
-            $state = wp_create_nonce('wpsmd_gsc_auth');
-            $client->setState($state);
-            
             // Set redirect URI to admin-ajax.php endpoint without any query parameters
             // IMPORTANT: This exact URL must be added to authorized redirect URIs in Google Cloud Console
             $redirect_uri = untrailingslashit(admin_url('admin-ajax.php'));
             $client->setRedirectUri($redirect_uri);
+            
+            // Add state parameter to track the original request
+            $state = array(
+                'nonce' => wp_create_nonce('wpsmd_gsc_auth'),
+                'action' => 'wpsmd_verify_gsc',
+                'page' => 'wpsmd-analytics',
+                'timestamp' => time(),
+                'site_url' => site_url()
+            );
+            $state_json = json_encode($state);
+            if ($state_json === false) {
+                error_log('WPSMD: Error encoding state JSON');
+                wp_send_json_error(array('message' => 'Internal server error: Could not encode state'));
+                return;
+            }
+            $state_base64 = base64_encode($state_json);
+            $client->setState($state_base64);
+            error_log('WPSMD: State parameter set: ' . print_r($state, true));
             
             // Log the authorization URL for debugging
             $auth_url = $client->createAuthUrl();
@@ -266,24 +280,6 @@ class WPSMD_Analytics {
                 }
             }
             
-            // Add state parameter to track the original request
-            $state = array(
-                'nonce' => wp_create_nonce('wpsmd_gsc_auth'),
-                'action' => 'wpsmd_verify_gsc',
-                'page' => 'wpsmd-analytics',
-                'timestamp' => time(),
-                'site_url' => site_url()
-            );
-            $state_json = json_encode($state);
-            if ($state_json === false) {
-                error_log('WPSMD: Error encoding state JSON');
-                wp_send_json_error(array('message' => 'Internal server error: Could not encode state'));
-                return;
-            }
-            $state_base64 = base64_encode($state_json);
-            $client->setState($state_base64);
-            error_log('WPSMD: State parameter set: ' . print_r($state, true));
-            
             // OAuth parameters already set above
 
             // Check if we already have a token
@@ -313,9 +309,16 @@ class WPSMD_Analytics {
             }
 
             // Handle the OAuth 2.0 flow
-            if (isset($_GET['code'])) {
+            if (isset($_POST['code']) || isset($_GET['code'])) {
+                $auth_code = isset($_POST['code']) ? $_POST['code'] : $_GET['code'];
+                $state = isset($_POST['state']) ? $_POST['state'] : (isset($_GET['state']) ? $_GET['state'] : null);
+                
+                error_log('WPSMD: Processing OAuth callback');
+                error_log('WPSMD: Auth code: ' . $auth_code);
+                error_log('WPSMD: State: ' . ($state ?? 'null'));
+                
                 // Verify state parameter to prevent CSRF
-                if (!isset($_GET['state'])) {
+                if (!$state) {
                     error_log('WPSMD: Missing state parameter');
                     wp_send_json_error(array('message' => __('Missing state parameter. Please try again.', 'wp-seo-meta-descriptions')));
                     return;
@@ -372,10 +375,10 @@ class WPSMD_Analytics {
 
                 try {
                     error_log('WPSMD: Received authorization code, attempting to fetch token');
-                    error_log('WPSMD: Authorization code: ' . $_GET['code']);
+                    error_log('WPSMD: Authorization code: ' . $auth_code);
                     
                     try {
-                        $token = $client->fetchAccessTokenWithAuthCode($_GET['code']);
+                        $token = $client->fetchAccessTokenWithAuthCode($auth_code);
                     } catch (Google_Service_Exception $e) {
                         $error_data = json_decode($e->getMessage(), true);
                         error_log('WPSMD: Google Service Exception: ' . print_r($error_data, true));
@@ -422,19 +425,12 @@ class WPSMD_Analytics {
                     
                     error_log('WPSMD: Test API call successful');
                     
-                    // If this is the OAuth callback (has code parameter), redirect to the analytics page
-                    if (isset($_GET['code'])) {
-                        $return_url = add_query_arg(
-                            array(
-                                'page' => 'wpsmd-analytics',
-                                'connection' => 'success',
-                                'state' => wp_create_nonce('wpsmd_gsc_success')
-                            ),
-                            admin_url('tools.php')
-                        );
-                        wp_redirect($return_url);
-                        exit;
-                    }
+                    // Return success response for the AJAX callback
+                    wp_send_json_success(array(
+                        'message' => __('Successfully connected to Google Search Console', 'wp-seo-meta-descriptions'),
+                        'reload' => true
+                    ));
+                    return;
                     
                     wp_send_json_success(array(
                         'message' => __('Successfully connected to Google Search Console', 'wp-seo-meta-descriptions'),

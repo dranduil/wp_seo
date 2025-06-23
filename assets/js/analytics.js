@@ -67,9 +67,10 @@
         $button.prop('disabled', true)
                .text(wpsmdAnalytics.i18n.loadingData);
 
-        // Check for authorization code in URL
+        // Check for authorization code and state in URL
         const urlParams = new URLSearchParams(window.location.search);
         const authCode = urlParams.get('code');
+        const state = urlParams.get('state');
         const error = urlParams.get('error');
 
         if (error) {
@@ -78,13 +79,19 @@
             return;
         }
 
+        // If we have both code and state, we're handling the OAuth callback
+        if (authCode && state) {
+            console.log('WPSMD: Handling OAuth callback with code and state');
+        }
+
         $.ajax({
             url: wpsmdAnalytics.ajax_url,
             type: 'POST',
             data: {
                 action: 'wpsmd_verify_gsc',
                 nonce: wpsmdAnalytics.nonce,
-                code: authCode
+                code: authCode,
+                state: state
             },
             success: function(response) {
                 console.log('WPSMD: Verify response:', response);
