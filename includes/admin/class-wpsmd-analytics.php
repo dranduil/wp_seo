@@ -206,9 +206,17 @@ class WPSMD_Analytics {
             
             // Set redirect URI to admin-ajax.php endpoint with action parameter
             // IMPORTANT: This exact URL must be added to authorized redirect URIs in Google Cloud Console
-            $redirect_uri = admin_url('admin-ajax.php') . '?action=wpsmd_verify_gsc&page=wpsmd-analytics';
+            $redirect_uri = admin_url('admin-ajax.php');
             $client->setRedirectUri($redirect_uri);
             error_log('WPSMD: Setting redirect URI to: ' . $redirect_uri);
+            
+            // Add state parameter to track the original request
+            $state = array(
+                'nonce' => wp_create_nonce('wpsmd_gsc_auth'),
+                'action' => 'wpsmd_verify_gsc',
+                'page' => 'wpsmd-analytics'
+            );
+            $client->setState(base64_encode(json_encode($state)));
             
             // OAuth parameters already set above
 
@@ -241,9 +249,26 @@ class WPSMD_Analytics {
             // Handle the OAuth 2.0 flow
             if (isset($_GET['code'])) {
                 // Verify state parameter to prevent CSRF
-                if (!isset($_GET['state']) || !wp_verify_nonce($_GET['state'], 'wpsmd_gsc_auth')) {
-                    error_log('WPSMD: Invalid OAuth state');
-                    wp_send_json_error(array('message' => __('Invalid OAuth state. Please try again.', 'wp-seo-meta-descriptions')));
+                if (!isset($_GET['state'])) {
+                    error_log('WPSMD: Missing state parameter');
+                    wp_send_json_error(array('message' => __('Missing state parameter. Please try again.', 'wp-seo-meta-descriptions')));
+                    return;
+                }
+
+                try {
+                    $state = json_decode(base64_decode($_GET['state']), true);
+                    if (!$state || !isset($state['nonce']) || !wp_verify_nonce($state['nonce'], 'wpsmd_gsc_auth')) {
+                        error_log('WPSMD: Invalid OAuth state');
+                        wp_send_json_error(array('message' => __('Invalid OAuth state. Please try again.', 'wp-seo-meta-descriptions')));
+                        return;
+                    }
+
+                    // Set the action and page parameters from the state
+                    $_GET['action'] = $state['action'];
+                    $_GET['page'] = $state['page'];
+                } catch (Exception $e) {
+                    error_log('WPSMD: Error decoding state: ' . $e->getMessage());
+                    wp_send_json_error(array('message' => __('Invalid state format. Please try again.', 'wp-seo-meta-descriptions')));
                     return;
                 }
 

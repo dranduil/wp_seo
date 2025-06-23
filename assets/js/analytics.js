@@ -68,11 +68,13 @@
             return;
         }
 
+        // Ensure we're using the exact same URL format as configured in Google Cloud Console
+        const ajaxUrl = wpsmdAnalytics.ajax_url + '?action=wpsmd_verify_gsc&page=wpsmd-analytics';
+        
         $.ajax({
-            url: wpsmdAnalytics.ajax_url,
+            url: ajaxUrl,
             type: 'POST',
             data: {
-                action: 'wpsmd_verify_gsc',
                 nonce: wpsmdAnalytics.nonce,
                 code: authCode
             },
