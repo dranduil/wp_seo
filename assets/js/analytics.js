@@ -139,25 +139,26 @@
             
             // Validate state parameter format
             try {
-                // First try to decode the state parameter directly
-                let stateData;
-                let decodedState = state;
-                
+                // Convert URL-safe base64 to standard base64
                 try {
-                    // Try direct base64 decode first
-                    const directDecoded = atob(state);
-                    try {
-                        stateData = JSON.parse(directDecoded);
-                        console.log('WPSMD: Successfully decoded state directly:', stateData);
-                    } catch (e) {
-                        console.log('WPSMD: Direct JSON parse failed, trying URL decode:', e);
-                        decodedState = cleanStateParameter(state);
-                        stateData = JSON.parse(atob(decodedState));
+                    // Replace URL-safe characters and restore padding if needed
+                    let standardBase64 = state.replace(/-/g, '+').replace(/_/g, '/');
+                    const padding = standardBase64.length % 4;
+                    if (padding) {
+                        standardBase64 += '='.repeat(4 - padding);
                     }
+                    console.log('WPSMD: Converted to standard base64:', standardBase64);
+
+                    // Attempt to decode
+                    const decoded = atob(standardBase64);
+                    console.log('WPSMD: Base64 decoded result:', decoded);
+
+                    // Parse JSON
+                    stateData = JSON.parse(decoded);
+                    console.log('WPSMD: Successfully parsed state data:', stateData);
                 } catch (e) {
-                    console.log('WPSMD: Direct base64 decode failed, trying URL decode first:', e);
-                    decodedState = cleanStateParameter(state);
-                    stateData = JSON.parse(atob(decodedState));
+                    console.error('WPSMD: State parameter processing failed:', e);
+                    throw new Error('Failed to process state parameter');
                 }
                 
                 console.log('WPSMD: Final parsed state data:', stateData);
@@ -200,50 +201,27 @@
             // Log raw state for debugging
             console.log('WPSMD: Raw state parameter:', state);
             
-            // First try direct base64 decode
             try {
-                const directDecoded = atob(state);
-                try {
-                    JSON.parse(directDecoded);
-                    console.log('WPSMD: Successfully decoded state directly:', directDecoded);
-                    return state; // Return original if it's already valid base64
-                } catch (e) {
-                    console.log('WPSMD: Direct decode succeeded but invalid JSON:', e);
+                // Convert URL-safe base64 to standard base64
+                let standardBase64 = state.replace(/-/g, '+').replace(/_/g, '/');
+                const padding = standardBase64.length % 4;
+                if (padding) {
+                    standardBase64 += '='.repeat(4 - padding);
                 }
+                console.log('WPSMD: Converted to standard base64:', standardBase64);
+
+                // Validate by attempting to decode and parse
+                const decoded = atob(standardBase64);
+                const stateData = JSON.parse(decoded);
+                console.log('WPSMD: Successfully validated state data:', stateData);
+                
+                // Return the original state since it's valid
+                return state;
             } catch (e) {
-                console.log('WPSMD: Direct base64 decode failed, trying URL decode:', e);
+                console.error('WPSMD: State parameter validation failed:', e);
+                // Return original state since we can't safely clean it
+                return state;
             }
-            
-            // Try URL decoding
-            let cleanedState = state;
-            try {
-                // Try to decode until we can't anymore (handles multiple encodings)
-                let iterations = 0;
-                const maxIterations = 3; // Prevent infinite loops
-                
-                while (iterations < maxIterations) {
-                    const decoded = decodeURIComponent(cleanedState);
-                    console.log(`WPSMD: Decode iteration ${iterations + 1}:`, decoded);
-                    
-                    if (decoded === cleanedState) break;
-                    cleanedState = decoded;
-                    iterations++;
-                }
-                
-                // Try to validate the final decoded state
-                try {
-                    const stateData = JSON.parse(atob(cleanedState));
-                    console.log('WPSMD: Final decoded state data:', stateData);
-                } catch (e) {
-                    console.warn('WPSMD: Final state validation failed:', e);
-                }
-                
-            } catch (e) {
-                console.warn('WPSMD: State parameter decoding error:', e);
-                return state; // Return original if decoding fails
-            }
-            
-            return cleanedState;
         }
 
         // Log request parameters for debugging

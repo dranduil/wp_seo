@@ -258,15 +258,29 @@ class WPSMD_Analytics {
                 wp_send_json_error(array('message' => 'Internal server error: Could not encode state'));
                 return;
             }
-            // Use URL-safe base64 encoding with proper padding
-            $state_base64 = rtrim(strtr(base64_encode($state_json), '+/', '-_'), '=');
-            error_log('WPSMD: URL-safe state parameter generated: ' . $state_base64);
+            // Generate base64 encoded state with proper padding
+            $state_base64 = base64_encode($state_json);
+            error_log('WPSMD: Initial base64 state: ' . $state_base64);
             
-            // Set the state parameter directly without additional URL encoding
-            // Google's OAuth implementation will handle the URL encoding
-            $client->setState($state_base64);
-            error_log('WPSMD: State parameter set on client: ' . $state_base64);
-            error_log('WPSMD: State parameter set: ' . print_r($state, true));
+            // Convert to URL-safe base64 but maintain padding
+            $state_base64_urlsafe = strtr($state_base64, '+/', '-_');
+            error_log('WPSMD: URL-safe state parameter generated: ' . $state_base64_urlsafe);
+            
+            // Validate the state parameter can be decoded correctly
+            $test_decode = base64_decode(strtr($state_base64_urlsafe, '-_', '+/'));
+            $test_json = json_decode($test_decode);
+            if ($test_json === null) {
+                error_log('WPSMD: Error - State parameter validation failed');
+                error_log('WPSMD: JSON decode error: ' . json_last_error_msg());
+                wp_send_json_error(array('message' => 'Internal server error: Invalid state parameter generation'));
+                return;
+            }
+            error_log('WPSMD: State parameter validation successful');
+            
+            // Set the validated state parameter
+            $client->setState($state_base64_urlsafe);
+            error_log('WPSMD: State parameter set on client: ' . $state_base64_urlsafe);
+            error_log('WPSMD: Original state data: ' . print_r($state, true));
             
             // Log the authorization URL for debugging
             $auth_url = $client->createAuthUrl();
