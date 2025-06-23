@@ -48,6 +48,7 @@ class WPSMD_Settings {
     public function create_admin_settings_page() {
         if (!is_array($this->options)) {
             $this->options = array();
+        }
         ?>
         <div class="wrap">
             <h1><?php echo esc_html( get_admin_page_title() ); ?></h1>
