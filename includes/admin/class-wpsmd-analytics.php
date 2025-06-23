@@ -206,8 +206,9 @@ class WPSMD_Analytics {
             
             // Set redirect URI to admin-ajax.php endpoint with action parameter
             // IMPORTANT: This exact URL must be added to authorized redirect URIs in Google Cloud Console
-            $redirect_uri = admin_url('admin-ajax.php');
+            $redirect_uri = site_url('wp-admin/admin-ajax.php');
             $client->setRedirectUri($redirect_uri);
+            error_log('WPSMD: Full redirect URI with protocol: ' . $redirect_uri);
             error_log('WPSMD: Setting redirect URI to: ' . $redirect_uri);
             
             // Add state parameter to track the original request
