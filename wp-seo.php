@@ -18,7 +18,8 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit; // Exit if accessed directly.
 }
 
-// Define plugin path and URL constants
+// Define plugin constants
+define( 'WPSMD_VERSION', '1.0.0' );
 define( 'WPSMD_PLUGIN_PATH', plugin_dir_path( __FILE__ ) );
 define( 'WPSMD_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 
