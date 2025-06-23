@@ -102,9 +102,25 @@ class WPSMD_Settings {
         );
 
         add_settings_field(
+            'seo_title_template', // ID
+            __( 'SEO Title Template', 'wp-seo-meta-descriptions' ), // Title
+            array( $this, 'seo_title_template_callback' ), // Callback
+            'wpsmd-settings-admin', // Page
+            'wpsmd_auto_generation_settings_section' // Section
+        );
+
+        add_settings_field(
             'enable_auto_seo_description', // ID
             __( 'Enable Auto SEO Description', 'wp-seo-meta-descriptions' ), // Title
             array( $this, 'enable_auto_seo_description_callback' ), // Callback
+            'wpsmd-settings-admin', // Page
+            'wpsmd_auto_generation_settings_section' // Section
+        );
+
+        add_settings_field(
+            'seo_description_template', // ID
+            __( 'SEO Description Template', 'wp-seo-meta-descriptions' ), // Title
+            array( $this, 'seo_description_template_callback' ), // Callback
             'wpsmd-settings-admin', // Page
             'wpsmd_auto_generation_settings_section' // Section
         );
@@ -130,7 +146,13 @@ class WPSMD_Settings {
             }
         }
         $new_input['enable_auto_seo_title'] = isset( $input['enable_auto_seo_title'] ) ? 1 : 0;
+        if ( isset( $input['seo_title_template'] ) ) {
+            $new_input['seo_title_template'] = sanitize_text_field( $input['seo_title_template'] );
+        }
         $new_input['enable_auto_seo_description'] = isset( $input['enable_auto_seo_description'] ) ? 1 : 0;
+        if ( isset( $input['seo_description_template'] ) ) {
+            $new_input['seo_description_template'] = sanitize_text_field( $input['seo_description_template'] );
+        }
         return $new_input;
     }
 
@@ -193,6 +215,31 @@ class WPSMD_Settings {
             checked( 1, isset( $this->options['enable_auto_seo_title'] ) ? $this->options['enable_auto_seo_title'] : 0, false )
         );
         echo '<label for="enable_auto_seo_title"> ' . __( 'Automatically generate SEO titles if not manually set.', 'wp-seo-meta-descriptions' ) . '</label>';
+    }
+
+    /**
+     * Callback for Enable Auto SEO Description checkbox.
+     */
+    /**
+     * Callback for SEO Title Template field.
+     */
+    public function seo_title_template_callback() {
+        printf(
+            '<input type="text" id="seo_title_template" name="wpsmd_options[seo_title_template]" value="%s" style="width: 100%%;" />',
+            isset( $this->options['seo_title_template'] ) ? esc_attr( $this->options['seo_title_template'] ) : '%title% | %sitename%'
+        );
+        echo '<p class="description">' . __( 'Available variables: %title% (Post/Page Title), %sitename% (Site Name), %category% (Primary Category), %excerpt% (Post Excerpt), %author% (Post Author)', 'wp-seo-meta-descriptions' ) . '</p>';
+    }
+
+    /**
+     * Callback for SEO Description Template field.
+     */
+    public function seo_description_template_callback() {
+        printf(
+            '<input type="text" id="seo_description_template" name="wpsmd_options[seo_description_template]" value="%s" style="width: 100%%;" />',
+            isset( $this->options['seo_description_template'] ) ? esc_attr( $this->options['seo_description_template'] ) : '%excerpt%'
+        );
+        echo '<p class="description">' . __( 'Available variables: %title% (Post/Page Title), %excerpt% (Post Excerpt), %category% (Primary Category), %author% (Post Author)', 'wp-seo-meta-descriptions' ) . '</p>';
     }
 
     /**

@@ -41,7 +41,8 @@ class WPSMD_Frontend {
             $custom_seo_title = get_post_meta( $post_id, '_wpsmd_seo_title', true );
             $headline = $custom_seo_title;
             if ( empty( $headline ) && $enable_auto_seo_title ) {
-                $headline = get_the_title( $post_id );
+                $title_template = isset( $wpsmd_options['seo_title_template'] ) ? $wpsmd_options['seo_title_template'] : '%title% | %sitename%';
+                $headline = $this->parse_template( $title_template, $post_obj );
             } elseif (empty($headline)) {
                 $headline = get_the_title( $post_id ); // Default fallback if not auto and not set
             }
@@ -50,7 +51,8 @@ class WPSMD_Frontend {
             $custom_meta_description = get_post_meta( $post_id, '_wpsmd_meta_description', true );
             $description = $custom_meta_description;
             if ( empty( $description ) && $enable_auto_seo_description ) {
-                $description = wp_strip_all_tags( $post_obj->post_excerpt ? $post_obj->post_excerpt : mb_substr( wp_strip_all_tags( $post_obj->post_content ), 0, 160 ) );
+                $desc_template = isset( $wpsmd_options['seo_description_template'] ) ? $wpsmd_options['seo_description_template'] : '%excerpt%';
+                $description = $this->parse_template( $desc_template, $post_obj );
             } elseif (empty($description)) {
                  $description = wp_strip_all_tags( $post_obj->post_excerpt ? $post_obj->post_excerpt : mb_substr( wp_strip_all_tags( $post_obj->post_content ), 0, 160 ) ); // Default fallback
             }
@@ -282,6 +284,7 @@ class WPSMD_Frontend {
 
             // Add Organization specific schema
             if ($schema['@type'] === 'Organization') {
+                var_dump($schema);
                 $schema['name'] = get_post_meta( $post_id, '_wpsmd_org_name', true ) ?: get_bloginfo( 'name' );
                 $logo_url = get_post_meta( $post_id, '_wpsmd_org_logo_url', true );
                 if (!empty($logo_url)) {
@@ -404,6 +407,38 @@ class WPSMD_Frontend {
     /**
      * Outputs the Open Graph and Twitter Card meta tags in the HTML head.
      */
+    /**
+     * Parse template variables and replace them with actual content.
+     *
+     * @param string $template The template string with variables.
+     * @param WP_Post $post The post object.
+     * @return string The parsed template.
+     */
+    private function parse_template( $template, $post ) {
+        $replacements = array(
+            '%title%' => get_the_title( $post->ID ),
+            '%sitename%' => get_bloginfo( 'name' ),
+            '%excerpt%' => wp_strip_all_tags( $post->post_excerpt ? $post->post_excerpt : mb_substr( wp_strip_all_tags( $post->post_content ), 0, 160 ) ),
+            '%author%' => get_the_author_meta( 'display_name', $post->post_author ),
+            '%category%' => ''
+        );
+
+        // Get primary category
+        $categories = get_the_category( $post->ID );
+        if ( !empty( $categories ) ) {
+            $replacements['%category%'] = $categories[0]->name;
+        }
+
+        return str_replace(
+            array_keys( $replacements ),
+            array_values( $replacements ),
+            $template
+        );
+    }
+
+    /**
+     * Output social meta tags in the HTML head.
+     */
     public function output_social_meta_tags() {
         if ( is_singular() ) {
             $post_id = get_queried_object_id();
@@ -419,7 +454,9 @@ class WPSMD_Frontend {
             $custom_seo_title = get_post_meta( $post_id, '_wpsmd_seo_title', true );
             $seo_title = $custom_seo_title;
             if ( empty( $seo_title ) && $enable_auto_seo_title ) {
-                $seo_title = get_the_title( $post_id );
+                $title_template = isset( $wpsmd_options['seo_title_template'] ) ? $wpsmd_options['seo_title_template'] : '%title% | %sitename%';
+                $post_obj = get_post($post_id);
+                $seo_title = $this->parse_template( $title_template, $post_obj );
             } elseif (empty($seo_title)) {
                 $seo_title = get_the_title( $post_id ); // Default fallback
             }
@@ -429,7 +466,8 @@ class WPSMD_Frontend {
             $post_obj = get_post($post_id);
             $meta_description = $custom_meta_description;
             if ( empty( $meta_description ) && $enable_auto_seo_description ) {
-                $meta_description = wp_strip_all_tags( $post_obj->post_excerpt ? $post_obj->post_excerpt : mb_substr( wp_strip_all_tags( $post_obj->post_content ), 0, 160 ) );
+                $desc_template = isset( $wpsmd_options['seo_description_template'] ) ? $wpsmd_options['seo_description_template'] : '%excerpt%';
+                $meta_description = $this->parse_template( $desc_template, $post_obj );
             } elseif (empty($meta_description)) {
                 $meta_description = wp_strip_all_tags( $post_obj->post_excerpt ? $post_obj->post_excerpt : mb_substr( wp_strip_all_tags( $post_obj->post_content ), 0, 160 ) ); // Default fallback
             }
