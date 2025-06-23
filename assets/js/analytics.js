@@ -1,6 +1,5 @@
-jQuery(document).ready(function($) {
+(function($) {
     'use strict';
-    initAnalytics();
 
     // Initialize the analytics dashboard
     function initAnalytics() {
@@ -48,6 +47,7 @@ jQuery(document).ready(function($) {
                 $button.prop('disabled', false).text(originalText);
             }
         });
+    }
 
     // Verify Google Search Console connection
     function verifySearchConsole() {
