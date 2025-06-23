@@ -9,6 +9,11 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit; // Exit if accessed directly.
 }
 
+// Check if composer autoload exists and load it
+if (file_exists(WPSMD_PLUGIN_PATH . 'vendor/autoload.php')) {
+    require_once WPSMD_PLUGIN_PATH . 'vendor/autoload.php';
+}
+
 class WPSMD_Analytics {
     /**
      * Initialize the analytics hooks.
@@ -19,6 +24,18 @@ class WPSMD_Analytics {
         add_action('wp_ajax_wpsmd_verify_gsc', array($this, 'verify_search_console'));
         add_action('wp_ajax_wpsmd_get_search_analytics', array($this, 'get_search_analytics'));
         add_action('wp_ajax_wpsmd_get_crawl_errors', array($this, 'get_crawl_errors'));
+        add_action('admin_notices', array($this, 'check_dependencies'));
+    }
+
+    /**
+     * Check if required dependencies are installed.
+     */
+    public function check_dependencies() {
+        if (!file_exists(WPSMD_PLUGIN_PATH . 'vendor/autoload.php')) {
+            echo '<div class="notice notice-error"><p>';
+            echo __('WP SEO Meta Descriptions plugin requires Composer dependencies to be installed. Please run <code>composer install</code> in the plugin directory.', 'wp-seo-meta-descriptions');
+            echo '</p></div>';
+        }
     }
 
     /**
@@ -56,9 +73,12 @@ class WPSMD_Analytics {
             WPSMD_VERSION
         );
 
+        $nonce = wp_create_nonce('wpsmd_analytics_nonce');
+        error_log('WPSMD: Generated nonce: ' . $nonce);
+
         wp_localize_script('wpsmd-analytics-js', 'wpsmdAnalytics', array(
             'ajax_url' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('wpsmd_analytics_nonce'),
+            'nonce' => $nonce,
             'i18n' => array(
                 'verifySuccess' => __('Successfully connected to Google Search Console', 'wp-seo-meta-descriptions'),
                 'verifyError' => __('Error connecting to Google Search Console', 'wp-seo-meta-descriptions'),
@@ -83,24 +103,54 @@ class WPSMD_Analytics {
      * Verify Google Search Console connection.
      */
     public function verify_search_console() {
-        check_ajax_referer('wpsmd_analytics_nonce', 'nonce');
+        error_log('WPSMD: Starting verify_search_console');
+        
+        if (!check_ajax_referer('wpsmd_analytics_nonce', 'nonce', false)) {
+            error_log('WPSMD: Nonce verification failed');
+            wp_send_json_error(array('message' => __('Invalid nonce', 'wp-seo-meta-descriptions')));
+            return;
+        }
 
         if (!current_user_can('manage_options')) {
+            error_log('WPSMD: Permission check failed');
             wp_send_json_error(array('message' => __('Permission denied', 'wp-seo-meta-descriptions')));
             return;
         }
 
+        error_log('WPSMD: Permission check passed');
         $options = get_option('wpsmd_options');
+        error_log('WPSMD: Retrieved options: ' . print_r($options, true));
+
         $client_id = isset($options['gsc_client_id']) ? $options['gsc_client_id'] : '';
         $client_secret = isset($options['gsc_client_secret']) ? $options['gsc_client_secret'] : '';
 
         if (empty($client_id) || empty($client_secret)) {
+            error_log('WPSMD: Missing GSC credentials - Client ID: ' . (empty($client_id) ? 'empty' : 'set') . ', Client Secret: ' . (empty($client_secret) ? 'empty' : 'set'));
             wp_send_json_error(array('message' => __('Please configure Google Search Console API credentials in settings.', 'wp-seo-meta-descriptions')));
             return;
         }
 
-        // Initialize Google Client
-        require_once WPSMD_PLUGIN_PATH . 'vendor/autoload.php';
+        error_log('WPSMD: GSC credentials validation passed');
+
+        error_log('WPSMD: Starting Google Client initialization');
+
+        // Check if Google API client is available
+        if (!class_exists('Google_Client')) {
+            error_log('WPSMD: Google_Client class not found. Checking autoloader...');
+            if (!file_exists(WPSMD_PLUGIN_PATH . 'vendor/autoload.php')) {
+                error_log('WPSMD: Composer autoload.php not found. Please run composer install');
+                wp_send_json_error(array('message' => __('Google API Client not installed. Please contact the administrator.', 'wp-seo-meta-descriptions')));
+                return;
+            }
+            require_once WPSMD_PLUGIN_PATH . 'vendor/autoload.php';
+            if (!class_exists('Google_Client')) {
+                error_log('WPSMD: Google_Client class still not found after loading autoloader');
+                wp_send_json_error(array('message' => __('Google API Client not properly installed. Please contact the administrator.', 'wp-seo-meta-descriptions')));
+                return;
+            }
+        }
+
+        error_log('WPSMD: Google_Client class found, proceeding with initialization');
 
         try {
             $client = new Google_Client();

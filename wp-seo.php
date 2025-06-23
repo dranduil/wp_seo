@@ -44,6 +44,7 @@ add_action( 'plugins_loaded', 'wpsmd_load_textdomain' );
 function wpsmd_init() {
     if ( is_admin() ) {
         new WPSMD_Admin();
+        new WPSMD_Settings();
         new WPSMD_Analytics();
     } 
     new WPSMD_Frontend(); // Frontend class should always be instantiated for wp_head hook

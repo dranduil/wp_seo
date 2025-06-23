@@ -1,5 +1,6 @@
-(function($) {
+jQuery(document).ready(function($) {
     'use strict';
+    initAnalytics();
 
     // Initialize the analytics dashboard
     function initAnalytics() {
@@ -21,6 +22,8 @@
         $button.prop('disabled', true)
                .text(wpsmdAnalytics.i18n.loadingData);
 
+        console.log('WPSMD: Sending verify request with nonce:', wpsmdAnalytics.nonce);
+
         $.ajax({
             url: wpsmdAnalytics.ajax_url,
             type: 'POST',
@@ -29,15 +32,19 @@
                 nonce: wpsmdAnalytics.nonce
             },
             success: function(response) {
+                console.log('WPSMD: Verify response:', response);
                 if (response.success) {
                     showNotice(wpsmdAnalytics.i18n.verifySuccess, 'success');
                     loadAnalyticsData();
                 } else {
-                    showNotice(wpsmdAnalytics.i18n.verifyError, 'error');
+                    console.error('WPSMD: Verification failed:', response.data ? response.data.message : 'Unknown error');
+                    showNotice(response.data ? response.data.message : wpsmdAnalytics.i18n.verifyError, 'error');
                 }
             },
-            error: function() {
-                showNotice(wpsmdAnalytics.i18n.verifyError, 'error');
+            error: function(jqXHR, textStatus, errorThrown) {
+                console.error('WPSMD: AJAX error:', textStatus, errorThrown);
+                console.error('WPSMD: Response:', jqXHR.responseText);
+                showNotice(wpsmdAnalytics.i18n.verifyError + ': ' + textStatus, 'error');
             },
             complete: function() {
                 $button.prop('disabled', false).text(originalText);
