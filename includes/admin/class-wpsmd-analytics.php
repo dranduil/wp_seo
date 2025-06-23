@@ -117,6 +117,20 @@ class WPSMD_Analytics {
             return;
         }
 
+        // Display the last used redirect URI if available
+        $last_redirect_uri = get_transient('wpsmd_last_redirect_uri');
+        if ($last_redirect_uri) {
+            echo '<div class="notice notice-info is-dismissible"><p>';
+            echo sprintf(
+                /* translators: %s: Redirect URI */
+                esc_html__('Last used redirect URI: %s', 'wp-seo-meta-descriptions'),
+                '<code>' . esc_url($last_redirect_uri) . '</code>'
+            );
+            echo '<br/><strong>' . esc_html__('Important:', 'wp-seo-meta-descriptions') . '</strong> ';
+            echo esc_html__('Make sure this exact URL is added to your Google Cloud Console\'s Authorized redirect URIs.', 'wp-seo-meta-descriptions');
+            echo '</p></div>';
+        }
+
         // Show success message if just connected and state is valid
         if (isset($_GET['connection']) && $_GET['connection'] === 'success' &&
             isset($_GET['state']) && wp_verify_nonce($_GET['state'], 'wpsmd_gsc_success')) {
@@ -210,7 +224,23 @@ class WPSMD_Analytics {
             // Remove any trailing slashes and ensure clean URL
             $redirect_uri = untrailingslashit($redirect_uri);
             $client->setRedirectUri($redirect_uri);
-            error_log('WPSMD: Full redirect URI: ' . $redirect_uri);
+            
+            // Log the exact redirect URI and its components for debugging
+            error_log('WPSMD: ====== Redirect URI Debug Info ======');
+            error_log('WPSMD: Exact redirect URI to add in Google Console: ' . $redirect_uri);
+            error_log('WPSMD: Current site URL: ' . site_url());
+            error_log('WPSMD: Current home URL: ' . home_url());
+            error_log('WPSMD: Current admin URL: ' . admin_url());
+            error_log('WPSMD: WordPress address (URL): ' . get_option('siteurl'));
+            error_log('WPSMD: Site address (URL): ' . get_option('home'));
+            error_log('WPSMD: Is SSL: ' . (is_ssl() ? 'Yes' : 'No'));
+            error_log('WPSMD: SERVER_NAME: ' . $_SERVER['SERVER_NAME']);
+            error_log('WPSMD: HTTP_HOST: ' . $_SERVER['HTTP_HOST']);
+            error_log('WPSMD: REQUEST_SCHEME: ' . $_SERVER['REQUEST_SCHEME']);
+            error_log('WPSMD: ================================');
+            
+            // Store the redirect URI in a transient for reference
+            set_transient('wpsmd_last_redirect_uri', $redirect_uri, HOUR_IN_SECONDS);
             error_log('WPSMD: Parsed redirect URI components: ' . print_r(parse_url($redirect_uri), true));
             
             // Verify the protocol matches what's configured in Google Cloud Console
