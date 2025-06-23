@@ -209,20 +209,36 @@ class WPSMD_Analytics {
             // Handle the OAuth 2.0 flow
             if (isset($_GET['code'])) {
                 try {
+                    error_log('WPSMD: Received authorization code, attempting to fetch token');
                     $token = $client->fetchAccessTokenWithAuthCode($_GET['code']);
+                    
                     if (isset($token['error'])) {
                         error_log('WPSMD: Token fetch error: ' . $token['error']);
                         wp_send_json_error(array('message' => __('Error fetching access token. Please try again.', 'wp-seo-meta-descriptions')));
                         return;
                     }
+                    
+                    error_log('WPSMD: Token fetched successfully: ' . print_r($token, true));
                     update_option('wpsmd_gsc_token', $token);
-                    wp_send_json_success(array('message' => __('Successfully connected to Google Search Console', 'wp-seo-meta-descriptions')));
+                    
+                    // Verify the token works by making a test API call
+                    $searchConsole = new Google_Service_SearchConsole($client);
+                    $siteUrl = get_site_url();
+                    $searchConsole->sites->get($siteUrl);
+                    
+                    error_log('WPSMD: Test API call successful');
+                    wp_send_json_success(array(
+                        'message' => __('Successfully connected to Google Search Console', 'wp-seo-meta-descriptions'),
+                        'reload' => true
+                    ));
                 } catch (Exception $e) {
-                    error_log('WPSMD: Token fetch exception: ' . $e->getMessage());
+                    error_log('WPSMD: Token fetch/verification exception: ' . $e->getMessage());
+                    delete_option('wpsmd_gsc_token'); // Clean up failed token
                     wp_send_json_error(array('message' => __('Error connecting to Google Search Console. Please try again.', 'wp-seo-meta-descriptions')));
                 }
             } else {
                 $auth_url = $client->createAuthUrl();
+                error_log('WPSMD: Generated auth URL: ' . $auth_url);
                 wp_send_json_success(array(
                     'auth_url' => $auth_url,
                     'message' => __('Please authorize access to Google Search Console', 'wp-seo-meta-descriptions')
