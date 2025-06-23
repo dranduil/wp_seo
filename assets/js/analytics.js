@@ -116,7 +116,11 @@
                         return;
                     }
                     showNotice(response.data.message, 'success');
-                    if (response.data.reload || authCode) {
+                    if (response.data.redirect_url) {
+                        console.log('WPSMD: Redirecting to:', response.data.redirect_url);
+                        window.location.href = response.data.redirect_url;
+                        return;
+                    } else if (authCode) {
                         console.log('WPSMD: Reloading page to refresh state');
                         // Remove code from URL and reload to refresh the page state
                         const newUrl = window.location.href.split('?')[0];

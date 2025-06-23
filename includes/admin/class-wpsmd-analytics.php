@@ -230,7 +230,9 @@ class WPSMD_Analytics {
                 wp_send_json_error(array('message' => 'Internal server error: Could not encode state'));
                 return;
             }
-            $state_base64 = base64_encode($state_json);
+            // Use URL-safe base64 encoding
+            $state_base64 = rtrim(strtr(base64_encode($state_json), '+/', '-_'), '=');
+            error_log('WPSMD: URL-safe state parameter generated: ' . $state_base64);
             $client->setState($state_base64);
             error_log('WPSMD: State parameter set: ' . print_r($state, true));
             
@@ -325,20 +327,27 @@ class WPSMD_Analytics {
                 }
 
                 try {
-                    $state_base64 = $_GET['state'];
-                    error_log('WPSMD: Received state parameter: ' . $state_base64);
+                    error_log('WPSMD: Raw state parameter received: ' . $state);
                     
-                    $state_json = base64_decode($state_base64);
-                    if ($state_json === false) {
+                    // Convert URL-safe base64 back to standard base64
+                    $base64_state = str_pad(strtr($state, '-_', '+/'), strlen($state) % 4, '=', STR_PAD_RIGHT);
+                    error_log('WPSMD: Converted to standard base64: ' . $base64_state);
+                    
+                    $decoded_state = base64_decode($base64_state, true);
+                    if ($decoded_state !== false) {
+                        error_log('WPSMD: Successfully decoded base64 state');
+                        $state_json = $decoded_state;
+                    } else {
                         error_log('WPSMD: Failed to decode base64 state');
                         wp_send_json_error(array('message' => __('Invalid state format. Please try again.', 'wp-seo-meta-descriptions')));
                         return;
                     }
-                    error_log('WPSMD: Decoded state JSON: ' . $state_json);
                     
+                    error_log('WPSMD: State JSON string: ' . $state_json);
                     $state = json_decode($state_json, true);
+                    
                     if (!$state || !is_array($state)) {
-                        error_log('WPSMD: Failed to decode state JSON');
+                        error_log('WPSMD: Failed to decode state JSON: ' . json_last_error_msg());
                         wp_send_json_error(array('message' => __('Invalid state format. Please try again.', 'wp-seo-meta-descriptions')));
                         return;
                     }
@@ -376,27 +385,52 @@ class WPSMD_Analytics {
                 try {
                     error_log('WPSMD: Received authorization code, attempting to fetch token');
                     error_log('WPSMD: Authorization code: ' . $auth_code);
+                    error_log('WPSMD: Redirect URI set to: ' . $client->getRedirectUri());
                     
                     try {
                         $token = $client->fetchAccessTokenWithAuthCode($auth_code);
-                    } catch (Google_Service_Exception $e) {
-                        $error_data = json_decode($e->getMessage(), true);
-                        error_log('WPSMD: Google Service Exception: ' . print_r($error_data, true));
-                        if (isset($error_data['error']['message'])) {
-                            wp_send_json_error(array('message' => 'Google API Error: ' . $error_data['error']['message']));
-                            return;
+                        error_log('WPSMD: Raw token response: ' . print_r($token, true));
+                    } catch (Exception $e) {
+                        error_log('WPSMD: Exception while fetching token: ' . $e->getMessage());
+                        error_log('WPSMD: Exception trace: ' . $e->getTraceAsString());
+                        
+                        if ($e instanceof Google_Service_Exception) {
+                            $error_data = json_decode($e->getMessage(), true);
+                            error_log('WPSMD: Google Service Exception details: ' . print_r($error_data, true));
+                            if (isset($error_data['error']['message'])) {
+                                wp_send_json_error(array('message' => 'Google API Error: ' . $error_data['error']['message']));
+                                return;
+                            }
                         }
-                        throw $e;
+                        
+                        wp_send_json_error(array('message' => 'Error fetching access token: ' . $e->getMessage()));
+                        return;
                     }
                     
+                    if (!is_array($token)) {
+                        error_log('WPSMD: Invalid token response type: ' . gettype($token));
+                        wp_send_json_error(array('message' => __('Invalid token response from Google. Please try again.', 'wp-seo-meta-descriptions')));
+                        return;
+                    }
+
                     if (isset($token['error'])) {
                         error_log('WPSMD: Token fetch error: ' . $token['error']);
-                        wp_send_json_error(array('message' => __('Error fetching access token. Please try again.', 'wp-seo-meta-descriptions')));
+                        $error_message = isset($token['error_description']) ? $token['error_description'] : $token['error'];
+                        wp_send_json_error(array('message' => sprintf(__('Error fetching access token: %s', 'wp-seo-meta-descriptions'), $error_message)));
+                        return;
+                    }
+
+                    if (!isset($token['access_token'])) {
+                        error_log('WPSMD: Missing access_token in response: ' . print_r($token, true));
+                        wp_send_json_error(array('message' => __('Invalid token response: missing access token', 'wp-seo-meta-descriptions')));
                         return;
                     }
                     
                     error_log('WPSMD: Token fetched successfully: ' . print_r($token, true));
                     update_option('wpsmd_gsc_token', $token);
+                    
+                    // Set the access token on the client for immediate use
+                    $client->setAccessToken($token);
                     
                     // Verify the token works by making a test API call
                     $searchConsole = new Google_Service_SearchConsole($client);
@@ -425,10 +459,19 @@ class WPSMD_Analytics {
                     
                     error_log('WPSMD: Test API call successful');
                     
-                    // Return success response for the AJAX callback
+                    // Return success response with redirect URL
+                    $redirect_url = add_query_arg(
+                        array(
+                            'page' => 'wpsmd-analytics',
+                            'connection' => 'success',
+                            'timestamp' => time()
+                        ),
+                        admin_url('tools.php')
+                    );
+                    
                     wp_send_json_success(array(
                         'message' => __('Successfully connected to Google Search Console', 'wp-seo-meta-descriptions'),
-                        'reload' => true
+                        'redirect_url' => $redirect_url
                     ));
                     return;
                     
