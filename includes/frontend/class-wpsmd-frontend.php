@@ -284,7 +284,6 @@ class WPSMD_Frontend {
 
             // Add Organization specific schema
             if ($schema['@type'] === 'Organization') {
-                var_dump($schema);
                 $schema['name'] = get_post_meta( $post_id, '_wpsmd_org_name', true ) ?: get_bloginfo( 'name' );
                 $logo_url = get_post_meta( $post_id, '_wpsmd_org_logo_url', true );
                 if (!empty($logo_url)) {
