@@ -1,0 +1,20 @@
+{
+    "name": "unlockthemove/wp-seo",
+    "description": "WordPress SEO plugin with meta descriptions and Google Search Console integration",
+    "type": "wordpress-plugin",
+    "require": {
+        "google/apiclient": "^2.15.0",
+        "php": ">=7.2"
+    },
+    "license": "GPL-2.0-or-later",
+    "autoload": {
+        "psr-4": {
+            "WPSMD\\": "includes/"
+        }
+    },
+    "config": {
+        "allow-plugins": {
+            "composer/installers": true
+        }
+    }
+}

@@ -25,7 +25,8 @@ define( 'WPSMD_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 
 // Include class files
 require_once WPSMD_PLUGIN_PATH . 'includes/admin/class-wpsmd-admin.php';
-require_once WPSMD_PLUGIN_PATH . 'includes/admin/class-wpsmd-settings.php'; // Added settings page
+require_once WPSMD_PLUGIN_PATH . 'includes/admin/class-wpsmd-settings.php';
+require_once WPSMD_PLUGIN_PATH . 'includes/admin/class-wpsmd-analytics.php';
 require_once WPSMD_PLUGIN_PATH . 'includes/frontend/class-wpsmd-frontend.php';
 
 /**
@@ -43,6 +44,7 @@ add_action( 'plugins_loaded', 'wpsmd_load_textdomain' );
 function wpsmd_init() {
     if ( is_admin() ) {
         new WPSMD_Admin();
+        new WPSMD_Analytics();
     } 
     new WPSMD_Frontend(); // Frontend class should always be instantiated for wp_head hook
 }

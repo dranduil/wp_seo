@@ -1,0 +1,140 @@
+.wpsmd-analytics-dashboard {
+    margin: 20px 0;
+}
+
+.wpsmd-analytics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+    margin-top: 20px;
+}
+
+.wpsmd-analytics-card {
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    border-radius: 4px;
+    padding: 20px;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
+}
+
+.wpsmd-analytics-card h2 {
+    margin: 0 0 15px;
+    padding: 0;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+/* GSC Connection Status */
+.wpsmd-gsc-status {
+    grid-column: 1 / -1;
+}
+
+.wpsmd-gsc-connection {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.wpsmd-gsc-connection .description {
+    margin: 0;
+    flex-grow: 1;
+}
+
+/* Search Performance Metrics */
+.wpsmd-search-performance {
+    grid-column: 1 / -1;
+}
+
+.wpsmd-metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.wpsmd-metric {
+    text-align: center;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 4px;
+}
+
+.wpsmd-metric h3 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: #646970;
+}
+
+.wpsmd-metric-value {
+    font-size: 24px;
+    font-weight: 600;
+    color: #1d2327;
+}
+
+/* Chart Container */
+.wpsmd-chart {
+    height: 300px;
+    margin-top: 20px;
+    background: #f8f9fa;
+    border-radius: 4px;
+}
+
+/* Tables */
+.wpsmd-table-container {
+    overflow-x: auto;
+}
+
+.wpsmd-keywords-table,
+.wpsmd-errors-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+}
+
+.wpsmd-keywords-table th,
+.wpsmd-errors-table th,
+.wpsmd-keywords-table td,
+.wpsmd-errors-table td {
+    padding: 8px 12px;
+    text-align: left;
+    border-bottom: 1px solid #e5e5e5;
+}
+
+.wpsmd-keywords-table th,
+.wpsmd-errors-table th {
+    background: #f8f9fa;
+    font-weight: 600;
+}
+
+.wpsmd-keywords-table tr:hover,
+.wpsmd-errors-table tr:hover {
+    background: #f8f9fa;
+}
+
+.wpsmd-no-data {
+    text-align: center;
+    color: #646970;
+    padding: 20px !important;
+}
+
+/* Responsive Design */
+@media screen and (max-width: 782px) {
+    .wpsmd-analytics-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .wpsmd-gsc-connection {
+        flex-direction: column;
+        align-items: stretch;
+        text-align: center;
+    }
+
+    .wpsmd-metrics-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .wpsmd-table-container {
+        margin: 0 -20px;
+        padding: 0 20px;
+    }
+}

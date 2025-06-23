@@ -63,6 +63,31 @@ class WPSMD_Settings {
             array( $this, 'sanitize_settings' ) // Sanitize callback
         );
 
+        // Google Search Console API Settings
+        add_settings_section(
+            'wpsmd_gsc_settings_section',
+            __('Google Search Console API Settings', 'wp-seo-meta-descriptions'),
+            array($this, 'print_gsc_section_info'),
+            'wpsmd-settings-admin'
+        );
+
+        add_settings_field(
+            'gsc_client_id',
+            __('Client ID', 'wp-seo-meta-descriptions'),
+            array($this, 'gsc_client_id_callback'),
+            'wpsmd-settings-admin',
+            'wpsmd_gsc_settings_section'
+        );
+
+        add_settings_field(
+            'gsc_client_secret',
+            __('Client Secret', 'wp-seo-meta-descriptions'),
+            array($this, 'gsc_client_secret_callback'),
+            'wpsmd-settings-admin',
+            'wpsmd_gsc_settings_section'
+        );
+
+        // OpenAI API Settings
         add_settings_section(
             'wpsmd_openai_settings_section', // ID
             __( 'OpenAI API Settings', 'wp-seo-meta-descriptions' ), // Title
@@ -144,6 +169,12 @@ class WPSMD_Settings {
             } else {
                 $new_input['openai_model'] = 'gpt-3.5-turbo'; // Default if invalid
             }
+        }
+        if ( isset( $input['gsc_client_id'] ) ) {
+            $new_input['gsc_client_id'] = sanitize_text_field( $input['gsc_client_id'] );
+        }
+        if ( isset( $input['gsc_client_secret'] ) ) {
+            $new_input['gsc_client_secret'] = sanitize_text_field( $input['gsc_client_secret'] );
         }
         $new_input['enable_auto_seo_title'] = isset( $input['enable_auto_seo_title'] ) ? 1 : 0;
         if ( isset( $input['seo_title_template'] ) ) {
