@@ -206,10 +206,7 @@ class WPSMD_Analytics {
             $client->setClientId($client_id);
             $client->setClientSecret($client_secret);
             $client->setScopes(array(
-                'https://www.googleapis.com/auth/webmasters',
-                'https://www.googleapis.com/auth/webmasters.readonly',
-                'https://www.googleapis.com/auth/siteverification',
-                'https://www.googleapis.com/auth/siteverification.verify_only'
+                'https://www.googleapis.com/auth/webmasters.readonly'
             ));
             $client->setAccessType('offline');
             $client->setPrompt('consent');
@@ -218,11 +215,12 @@ class WPSMD_Analytics {
             $state = wp_create_nonce('wpsmd_gsc_auth');
             $client->setState($state);
             
-            // Set redirect URI to admin-ajax.php endpoint with action parameter
+            // Set redirect URI to admin-ajax.php endpoint without any query parameters
             // IMPORTANT: This exact URL must be added to authorized redirect URIs in Google Cloud Console
-            $redirect_uri = admin_url('admin-ajax.php');
-            // Remove any trailing slashes and ensure clean URL
-            $redirect_uri = untrailingslashit($redirect_uri);
+            $redirect_uri = untrailingslashit(admin_url('admin-ajax.php'));
+            
+            // Log the authorization URL for debugging
+            error_log('WPSMD: Authorization URL: ' . $client->createAuthUrl());
             $client->setRedirectUri($redirect_uri);
             
             // Log the exact redirect URI and its components for debugging
