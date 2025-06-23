@@ -12,6 +12,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 class WPSMD_Settings {
 
     private $options;
+    private static $menu_added = false;
 
     /**
      * Initialize the settings page hooks.
@@ -25,6 +26,10 @@ class WPSMD_Settings {
      * Add options page.
      */
     public function add_plugin_settings_page() {
+        if (self::$menu_added) {
+            return;
+        }
+        
         add_options_page(
             __( 'WP SEO Meta Descriptions Settings', 'wp-seo-meta-descriptions' ),
             __( 'WP SEO Meta', 'wp-seo-meta-descriptions' ),
@@ -32,6 +37,8 @@ class WPSMD_Settings {
             'wpsmd-settings',
             array( $this, 'create_admin_settings_page' )
         );
+        
+        self::$menu_added = true;
     }
 
     /**
