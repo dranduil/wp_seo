@@ -177,7 +177,7 @@ class WPSMD_Analytics {
             $client = new Google_Client();
             $client->setClientId($client_id);
             $client->setClientSecret($client_secret);
-            $client->setRedirectUri(admin_url('admin.php?page=wpsmd-analytics'));
+            $client->setRedirectUri(admin_url('tools.php?page=wpsmd-analytics'));
             $client->addScope('https://www.googleapis.com/auth/webmasters.readonly');
 
             // Check if we already have a token
