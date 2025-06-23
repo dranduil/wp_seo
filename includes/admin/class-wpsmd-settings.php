@@ -18,6 +18,7 @@ class WPSMD_Settings {
      * Initialize the settings page hooks.
      */
     public function __construct() {
+        $this->options = get_option('wpsmd_options', array());
         add_action( 'admin_menu', array( $this, 'add_plugin_settings_page' ) );
         add_action( 'admin_init', array( $this, 'register_settings' ) );
     }
@@ -45,7 +46,8 @@ class WPSMD_Settings {
      * Create the settings page.
      */
     public function create_admin_settings_page() {
-        $this->options = get_option( 'wpsmd_options' );
+        if (!is_array($this->options)) {
+            $this->options = array();
         ?>
         <div class="wrap">
             <h1><?php echo esc_html( get_admin_page_title() ); ?></h1>
@@ -187,33 +189,38 @@ class WPSMD_Settings {
     }
 
     public function sanitize_settings( $input ) {
-        $new_input = array();
-        if ( isset( $input['openai_api_key'] ) ) {
-            $new_input['openai_api_key'] = sanitize_text_field( $input['openai_api_key'] );
+        // Get existing options to preserve values not being updated
+        $new_input = get_option('wpsmd_options', array());
+        
+        // Sanitize Google Search Console settings
+        if (isset($input['gsc_client_id'])) {
+            $new_input['gsc_client_id'] = sanitize_text_field($input['gsc_client_id']);
         }
-        if ( isset( $input['openai_model'] ) ) {
-            // Basic sanitization, ensure it's one of the allowed models
-            $allowed_models = array( 'gpt-3.5-turbo', 'gpt-4', 'gpt-4-turbo-preview' ); // Add more as needed
-            if ( in_array( $input['openai_model'], $allowed_models, true ) ) {
-                $new_input['openai_model'] = $input['openai_model'];
-            } else {
-                $new_input['openai_model'] = 'gpt-3.5-turbo'; // Default if invalid
-            }
+        if (isset($input['gsc_client_secret'])) {
+            $new_input['gsc_client_secret'] = sanitize_text_field($input['gsc_client_secret']);
         }
-        if ( isset( $input['gsc_client_id'] ) ) {
-            $new_input['gsc_client_id'] = sanitize_text_field( $input['gsc_client_id'] );
+
+        // Sanitize OpenAI settings
+        if (isset($input['openai_api_key'])) {
+            $new_input['openai_api_key'] = sanitize_text_field($input['openai_api_key']);
         }
-        if ( isset( $input['gsc_client_secret'] ) ) {
-            $new_input['gsc_client_secret'] = sanitize_text_field( $input['gsc_client_secret'] );
+        if (isset($input['openai_model'])) {
+            $allowed_models = array('gpt-3.5-turbo', 'gpt-4', 'gpt-4-turbo-preview');
+            $new_input['openai_model'] = in_array($input['openai_model'], $allowed_models, true) 
+                ? $input['openai_model'] 
+                : 'gpt-3.5-turbo';
         }
-        $new_input['enable_auto_seo_title'] = isset( $input['enable_auto_seo_title'] ) ? 1 : 0;
-        if ( isset( $input['seo_title_template'] ) ) {
-            $new_input['seo_title_template'] = sanitize_text_field( $input['seo_title_template'] );
+
+        // Sanitize auto-generation settings
+        $new_input['enable_auto_seo_title'] = isset($input['enable_auto_seo_title']) ? 1 : 0;
+        if (isset($input['seo_title_template'])) {
+            $new_input['seo_title_template'] = sanitize_text_field($input['seo_title_template']);
         }
-        $new_input['enable_auto_seo_description'] = isset( $input['enable_auto_seo_description'] ) ? 1 : 0;
-        if ( isset( $input['seo_description_template'] ) ) {
-            $new_input['seo_description_template'] = sanitize_text_field( $input['seo_description_template'] );
+        $new_input['enable_auto_seo_description'] = isset($input['enable_auto_seo_description']) ? 1 : 0;
+        if (isset($input['seo_description_template'])) {
+            $new_input['seo_description_template'] = sanitize_text_field($input['seo_description_template']);
         }
+
         return $new_input;
     }
 
