@@ -388,22 +388,48 @@ class WPSMD_Analytics {
                     error_log('WPSMD: Redirect URI set to: ' . $client->getRedirectUri());
                     
                     try {
+                        // Log the complete request details
+                        error_log('WPSMD: Complete request details:');
+                        error_log('WPSMD: Auth code: ' . $auth_code);
+                        error_log('WPSMD: Redirect URI: ' . $client->getRedirectUri());
+                        error_log('WPSMD: Client ID: ' . substr($client->getClientId(), 0, 8) . '...');
+                        
+                        // Ensure redirect URI matches exactly
+                        $redirect_uri = untrailingslashit(admin_url('admin-ajax.php'));
+                        $client->setRedirectUri($redirect_uri);
+                        
                         $token = $client->fetchAccessTokenWithAuthCode($auth_code);
                         error_log('WPSMD: Raw token response: ' . print_r($token, true));
                     } catch (Exception $e) {
                         error_log('WPSMD: Exception while fetching token: ' . $e->getMessage());
                         error_log('WPSMD: Exception trace: ' . $e->getTraceAsString());
+                        error_log('WPSMD: Request headers: ' . print_r(getallheaders(), true));
+                        
+                        $error_message = $e->getMessage();
+                        error_log('WPSMD: Error message: ' . $error_message);
                         
                         if ($e instanceof Google_Service_Exception) {
-                            $error_data = json_decode($e->getMessage(), true);
+                            $error_data = json_decode($error_message, true);
                             error_log('WPSMD: Google Service Exception details: ' . print_r($error_data, true));
-                            if (isset($error_data['error']['message'])) {
-                                wp_send_json_error(array('message' => 'Google API Error: ' . $error_data['error']['message']));
-                                return;
+                            
+                            if (isset($error_data['error'])) {
+                                if (is_string($error_data['error'])) {
+                                    $error_message = $error_data['error'];
+                                } else if (isset($error_data['error']['message'])) {
+                                    $error_message = $error_data['error']['message'];
+                                }
                             }
+                        } else if (strpos($error_message, '400') !== false) {
+                            error_log('WPSMD: 400 Bad Request detected');
+                            $error_message = 'Invalid request. Please check the redirect URI in Google Cloud Console matches exactly: ' . $redirect_uri;
                         }
                         
-                        wp_send_json_error(array('message' => 'Error fetching access token: ' . $e->getMessage()));
+                        wp_send_json_error(array(
+                            'message' => sprintf(
+                                __('Error connecting to Google Search Console: %s. Please verify your Google Cloud Console configuration.', 'wp-seo-meta-descriptions'),
+                                $error_message
+                            )
+                        ));
                         return;
                     }
                     
