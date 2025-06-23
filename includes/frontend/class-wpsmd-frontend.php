@@ -289,27 +289,27 @@ class WPSMD_Frontend {
                 } elseif (get_site_icon_url()) {
                     $schema['logo'] = get_site_icon_url();
                 }
-                $schema['legalName'] = get_post_meta( $post_id, '_wpsmd_organization_legal_name', true );
+                $schema['legalName'] = get_post_meta( $post_id, '_wpsmd_org_legal_name', true );
 
                 $address = array(
                     '@type' => 'PostalAddress',
-                    'streetAddress' => get_post_meta( $post_id, '_wpsmd_organization_street_address', true ),
-                    'addressLocality' => get_post_meta( $post_id, '_wpsmd_organization_address_locality', true ),
-                    'addressRegion' => get_post_meta( $post_id, '_wpsmd_organization_address_region', true ),
-                    'postalCode' => get_post_meta( $post_id, '_wpsmd_organization_postal_code', true ),
-                    'addressCountry' => get_post_meta( $post_id, '_wpsmd_organization_address_country', true ),
+                    'streetAddress' => get_post_meta( $post_id, '_wpsmd_org_street_address', true ),
+                    'addressLocality' => get_post_meta( $post_id, '_wpsmd_org_locality', true ),
+                    'addressRegion' => get_post_meta( $post_id, '_wpsmd_org_region', true ),
+                    'postalCode' => get_post_meta( $post_id, '_wpsmd_org_postal_code', true ),
+                    'addressCountry' => get_post_meta( $post_id, '_wpsmd_org_country', true ),
                 );
                 // Only add address if at least one field is filled
                 if (array_filter($address)) {
                     $schema['address'] = $address;
                 }
 
-                $telephone = get_post_meta( $post_id, '_wpsmd_organization_telephone', true );
+                $telephone = get_post_meta( $post_id, '_wpsmd_org_telephone', true );
                 if (!empty($telephone)) $schema['telephone'] = esc_attr($telephone);
-                $email = get_post_meta( $post_id, '_wpsmd_organization_email', true );
+                $email = get_post_meta( $post_id, '_wpsmd_org_email', true );
                 if (!empty($email)) $schema['email'] = sanitize_email($email);
 
-                $same_as_str = get_post_meta( $post_id, '_wpsmd_organization_same_as', true );
+                $same_as_str = get_post_meta( $post_id, '_wpsmd_org_same_as', true );
                 if (!empty($same_as_str)) {
                     $same_as_urls = array_map('trim', explode("\n", esc_textarea($same_as_str)));
                     $schema['sameAs'] = array_filter(array_map('esc_url', $same_as_urls));
