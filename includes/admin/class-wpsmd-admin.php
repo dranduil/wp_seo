@@ -31,18 +31,39 @@ class WPSMD_Admin {
      * Enqueue admin scripts and styles.
      */
     public function enqueue_admin_scripts( $hook ) {
-        // Enqueue on post edit screens and our custom bulk SEO page
-        if ( 'post.php' !== $hook && 'post-new.php' !== $hook && 'seo_page_wpsmd-bulk-seo' !== $hook ) {
-            return;
+        // Enqueue on post edit screens
+        if ( 'post.php' === $hook || 'post-new.php' === $hook ) {
+            wp_enqueue_script( 'wpsmd-admin-js', plugin_dir_url( __FILE__ ) . '../../assets/js/admin.js', array( 'jquery' ), WPSMD_VERSION, true );
+            wp_localize_script( 'wpsmd-admin-js', 'wpsmd_ajax', array(
+                'ajax_url' => admin_url( 'admin-ajax.php' ),
+                'nonce' => wp_create_nonce('wpsmd_ajax_nonce')
+            ));
+            wp_enqueue_style( 'wpsmd-admin-css', plugin_dir_url( __FILE__ ) . '../../assets/css/admin.css', array(), WPSMD_VERSION );
         }
 
-        wp_enqueue_script( 'wpsmd-admin-js', plugin_dir_url( __FILE__ ) . '../../assets/js/admin.js', array( 'jquery' ), WPSMD_VERSION, true );
-        wp_localize_script( 'wpsmd-admin-js', 'wpsmd_ajax', array(
-            'ajax_url' => admin_url( 'admin-ajax.php' ),
-            'nonce' => wp_create_nonce('wpsmd_ajax_nonce')
-        ));
-
-        wp_enqueue_style( 'wpsmd-admin-css', plugin_dir_url( __FILE__ ) . '../../assets/css/admin.css', array(), WPSMD_VERSION );
+        // Enqueue on our custom bulk SEO page
+        if ( 'tools_page_wpsmd-bulk-seo' === $hook ) {
+            wp_enqueue_script( 'wpsmd-bulk-editor-js', plugin_dir_url( __FILE__ ) . '../../assets/js/bulk-editor.js', array( 'jquery' ), WPSMD_VERSION, true );
+            wp_localize_script( 'wpsmd-bulk-editor-js', 'wpsmdBulkEditor', array(
+                'ajax_url' => admin_url( 'admin-ajax.php' ),
+                'nonce' => wp_create_nonce('wpsmd_ajax_nonce'),
+                'editText' => __('Edit', 'wp-seo-meta-descriptions'),
+                'viewText' => __('View', 'wp-seo-meta-descriptions'),
+                'seoTitlePlaceholder' => __('Enter SEO title', 'wp-seo-meta-descriptions'),
+                'metaDescPlaceholder' => __('Enter meta description', 'wp-seo-meta-descriptions'),
+                'canonicalPlaceholder' => __('Enter canonical URL', 'wp-seo-meta-descriptions'),
+                'errorLoading' => __('Error loading posts', 'wp-seo-meta-descriptions'),
+                'saveSuccess' => __('Changes saved successfully', 'wp-seo-meta-descriptions'),
+                'saveError' => __('Error saving changes', 'wp-seo-meta-descriptions'),
+                'templateSaveSuccess' => __('Templates saved successfully', 'wp-seo-meta-descriptions'),
+                'templateSaveError' => __('Error saving templates', 'wp-seo-meta-descriptions'),
+                'exportError' => __('Error exporting settings', 'wp-seo-meta-descriptions'),
+                'importSuccess' => __('Settings imported successfully', 'wp-seo-meta-descriptions'),
+                'importError' => __('Error importing settings', 'wp-seo-meta-descriptions'),
+                'selectFileError' => __('Please select a file to import', 'wp-seo-meta-descriptions'),
+                'invalidFileError' => __('Invalid settings file', 'wp-seo-meta-descriptions')
+            ));
+            wp_enqueue_style( 'wpsmd-bulk-editor-css', plugin_dir_url( __FILE__ ) . '../../assets/css/bulk-editor.css', array(), WPSMD_VERSION );
     }
 
     /**
@@ -163,64 +184,11 @@ class WPSMD_Admin {
      * Render the bulk SEO management page
      */
     public function render_bulk_seo_page() {
-        // Get all public post types
-        $post_types = get_post_types(array('public' => true), 'objects');
-        
-        echo '<div class="wrap">';
-        echo '<h1>' . __('Bulk SEO Manager', 'wp-seo-meta-descriptions') . '</h1>';
-        
-        // Tabs
-        echo '<h2 class="nav-tab-wrapper">';
-        echo '<a href="#bulk-editor" class="nav-tab nav-tab-active">' . __('Bulk Editor', 'wp-seo-meta-descriptions') . '</a>';
-        echo '<a href="#cpt-templates" class="nav-tab">' . __('CPT Templates', 'wp-seo-meta-descriptions') . '</a>';
-        echo '<a href="#import-export" class="nav-tab">' . __('Import/Export', 'wp-seo-meta-descriptions') . '</a>';
-        echo '</h2>';
-
-        // Bulk Editor Tab
-        echo '<div id="bulk-editor" class="tab-content">';
-        echo '<form id="bulk-seo-form">';
-        echo '<select id="post-type-filter">';
-        foreach ($post_types as $post_type) {
-            echo '<option value="' . esc_attr($post_type->name) . '">' . esc_html($post_type->labels->name) . '</option>';
+        if (!current_user_can('manage_options')) {
+            wp_die(__('You do not have sufficient permissions to access this page.', 'wp-seo-meta-descriptions'));
         }
-        echo '</select>';
-        echo '<div id="bulk-seo-items"></div>';
-        echo '<button type="submit" class="button button-primary">' . __('Save All Changes', 'wp-seo-meta-descriptions') . '</button>';
-        echo '</form>';
-        echo '</div>';
 
-        // CPT Templates Tab
-        echo '<div id="cpt-templates" class="tab-content" style="display:none;">';
-        echo '<form id="cpt-templates-form">';
-        foreach ($post_types as $post_type) {
-            echo '<h3>' . esc_html($post_type->labels->name) . '</h3>';
-            echo '<p>';
-            echo '<label>' . __('Title Template:', 'wp-seo-meta-descriptions') . '</label><br>';
-            echo '<input type="text" name="title_template[' . esc_attr($post_type->name) . ']" class="large-text" />';
-            echo '<span class="description">' . __('Available variables: %title%, %sitename%, %category%, %tag%', 'wp-seo-meta-descriptions') . '</span>';
-            echo '</p>';
-            echo '<p>';
-            echo '<label>' . __('Description Template:', 'wp-seo-meta-descriptions') . '</label><br>';
-            echo '<textarea name="desc_template[' . esc_attr($post_type->name) . ']" class="large-text" rows="3"></textarea>';
-            echo '<span class="description">' . __('Available variables: %excerpt%, %title%, %category%, %tag%', 'wp-seo-meta-descriptions') . '</span>';
-            echo '</p>';
-        }
-        echo '<button type="submit" class="button button-primary">' . __('Save Templates', 'wp-seo-meta-descriptions') . '</button>';
-        echo '</form>';
-        echo '</div>';
-
-        // Import/Export Tab
-        echo '<div id="import-export" class="tab-content" style="display:none;">';
-        echo '<h3>' . __('Export Settings', 'wp-seo-meta-descriptions') . '</h3>';
-        echo '<p><button type="button" id="export-settings" class="button">' . __('Export All Settings', 'wp-seo-meta-descriptions') . '</button></p>';
-        echo '<h3>' . __('Import Settings', 'wp-seo-meta-descriptions') . '</h3>';
-        echo '<form id="import-settings-form">';
-        echo '<p><input type="file" id="import-file" accept=".json" /></p>';
-        echo '<p><button type="submit" class="button">' . __('Import Settings', 'wp-seo-meta-descriptions') . '</button></p>';
-        echo '</form>';
-        echo '</div>';
-
-        echo '</div>'; // .wrap
+        require_once plugin_dir_path(__FILE__) . 'views/bulk-seo-editor.php';
     }
 
     /**
@@ -248,9 +216,12 @@ class WPSMD_Admin {
         foreach ($posts as $post) {
             $formatted_posts[] = array(
                 'ID' => $post->ID,
-                'title' => $post->post_title,
+                'post_title' => $post->post_title,
                 'seo_title' => get_post_meta($post->ID, '_wpsmd_seo_title', true),
-                'meta_description' => get_post_meta($post->ID, '_wpsmd_meta_description', true)
+                'meta_description' => get_post_meta($post->ID, '_wpsmd_meta_description', true),
+                'canonical_url' => get_post_meta($post->ID, '_wpsmd_canonical_url', true),
+                'edit_link' => get_edit_post_link($post->ID),
+                'permalink' => get_permalink($post->ID)
             );
         }
 
@@ -272,8 +243,15 @@ class WPSMD_Admin {
         foreach ($items as $item) {
             $post_id = absint($item['post_id']);
             if ($post_id && current_user_can('edit_post', $post_id)) {
-                update_post_meta($post_id, '_wpsmd_seo_title', sanitize_text_field($item['title']));
-                update_post_meta($post_id, '_wpsmd_meta_description', sanitize_textarea_field($item['description']));
+                update_post_meta($post_id, '_wpsmd_seo_title', sanitize_text_field($item['seo_title']));
+                update_post_meta($post_id, '_wpsmd_meta_description', sanitize_textarea_field($item['meta_description']));
+                if (isset($item['canonical_url'])) {
+                    if (!empty($item['canonical_url'])) {
+                        update_post_meta($post_id, '_wpsmd_canonical_url', esc_url_raw($item['canonical_url']));
+                    } else {
+                        delete_post_meta($post_id, '_wpsmd_canonical_url');
+                    }
+                }
                 $updated++;
             }
         }
