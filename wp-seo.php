@@ -42,12 +42,17 @@ function wpsmd_load_textdomain() {
 add_action( 'plugins_loaded', 'wpsmd_load_textdomain' );
 
 function wpsmd_init() {
-    if ( is_admin() ) {
-        new WPSMD_Admin();
-        new WPSMD_Settings();
-        new WPSMD_Analytics();
-    } 
-    new WPSMD_Frontend(); // Frontend class should always be instantiated for wp_head hook
+    static $initialized = false;
+    
+    if (!$initialized) {
+        if (is_admin()) {
+            new WPSMD_Admin();
+            new WPSMD_Settings();
+            new WPSMD_Analytics();
+        } 
+        new WPSMD_Frontend(); // Frontend class should always be instantiated for wp_head hook
+        $initialized = true;
+    }
 }
 add_action( 'plugins_loaded', 'wpsmd_init', 11 ); // Run after textdomain is loaded
 

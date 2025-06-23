@@ -38,21 +38,26 @@ Implement various schema types to provide search engines with detailed informati
 - **Speakable Schema:**
   - Automatically adds `speakable` schema markup for 'Article' or 'NewsArticle' types, identifying sections suitable for text-to-speech playback. Configurable via CSS selectors.
 
-### 4. OpenAI Integration (Optional)
+### 4. SEO Analytics Dashboard
+- **Google Search Console Integration:** View your site's search performance data directly in WordPress.
+- **Access Analytics:** Navigate to `https://your-site-domain/wp-admin/tools.php?page=wpsmd-analytics` or use the "SEO Analytics" menu item under Tools.
+- **Performance Metrics:** Track impressions, clicks, CTR, and average position for your content.
+
+### 5. OpenAI Integration (Optional)
 - **Meta Description Suggestions:** Leverage the OpenAI API to automatically generate meta description suggestions based on your post content (requires a valid OpenAI API key).
 
-### 5. Global Settings Page
+### 6. Global Settings Page
 - **Centralized API Key Management:** A dedicated settings page under "Settings > WP SEO Meta" to securely store and manage your OpenAI API Key globally, rather than per post.
 
-### 6. Efficient Data Storage
+### 7. Efficient Data Storage
 - **Post Meta:** All post-specific SEO data (titles, descriptions, schema details, etc.) is stored efficiently as post meta, associated with each individual post or page. Meta keys are prefixed with `_wpsmd_`.
 - **WordPress Options:** The global OpenAI API key is stored securely in the `wp_options` table.
 
-### 7. Dynamic & Conditional Logic
+### 8. Dynamic & Conditional Logic
 - **Contextual Fields:** The SEO meta box intelligently displays only the relevant input fields based on the schema type selected for a particular post or page.
 - **Smart Saving:** Data is saved or deleted from post meta based on the chosen schema type and whether specific fields are filled, ensuring a clean database.
 
-### 8. Fallback Mechanisms
+### 9. Fallback Mechanisms
 - **Sensible Defaults:** The plugin provides intelligent fallbacks if specific SEO fields are not manually filled:
   - Post title is used for SEO title.
   - Post excerpt (or an auto-generated one) is used for the meta description.
