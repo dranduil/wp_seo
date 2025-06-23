@@ -117,6 +117,19 @@ class WPSMD_Analytics {
             return;
         }
 
+        // Show success message if just connected
+        if (isset($_GET['connection']) && $_GET['connection'] === 'success') {
+            add_settings_error(
+                'wpsmd_messages',
+                'wpsmd_connection_success',
+                __('Successfully connected to Google Search Console', 'wp-seo-meta-descriptions'),
+                'updated'
+            );
+        }
+
+        // Display any settings messages
+        settings_errors('wpsmd_messages');
+
         require_once WPSMD_PLUGIN_PATH . 'includes/admin/views/analytics-dashboard.php';
     }
 
@@ -177,7 +190,9 @@ class WPSMD_Analytics {
             $client = new Google_Client();
             $client->setClientId($client_id);
             $client->setClientSecret($client_secret);
-            $client->setRedirectUri(admin_url('tools.php?page=wpsmd-analytics'));
+            // Set redirect URI to admin-ajax.php endpoint
+            $client->setRedirectUri(admin_url('admin-ajax.php'));
+            error_log('WPSMD: Setting redirect URI to: ' . admin_url('admin-ajax.php'));
             $client->addScope('https://www.googleapis.com/auth/webmasters.readonly');
 
             // Check if we already have a token
@@ -247,6 +262,13 @@ class WPSMD_Analytics {
                     }
                     
                     error_log('WPSMD: Test API call successful');
+                    
+                    // If this is the OAuth callback (has code parameter), redirect to the analytics page
+                    if (isset($_GET['code'])) {
+                        wp_redirect(admin_url('tools.php?page=wpsmd-analytics&connection=success'));
+                        exit;
+                    }
+                    
                     wp_send_json_success(array(
                         'message' => __('Successfully connected to Google Search Console', 'wp-seo-meta-descriptions'),
                         'reload' => true

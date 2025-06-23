@@ -82,6 +82,8 @@
                     showNotice(response.data.message, 'success');
                     if (response.data.auth_url) {
                         console.log('WPSMD: Redirecting to auth URL');
+                        // Store the current page URL before redirecting
+                        sessionStorage.setItem('wpsmd_redirect_after_auth', window.location.href);
                         window.location.href = response.data.auth_url;
                     } else if (response.data.reload || authCode) {
                         console.log('WPSMD: Reloading page to refresh state');
