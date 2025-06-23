@@ -101,13 +101,15 @@
                     return;
                 }
                 if (response.success) {
-                    showNotice(response.data.message, 'success');
                     if (response.data.auth_url) {
-                        console.log('WPSMD: Redirecting to auth URL');
+                        console.log('WPSMD: Redirecting to auth URL:', response.data.auth_url);
                         // Store the current page URL before redirecting
                         sessionStorage.setItem('wpsmd_redirect_after_auth', window.location.href);
                         window.location.href = response.data.auth_url;
-                    } else if (response.data.reload || authCode) {
+                        return;
+                    }
+                    showNotice(response.data.message, 'success');
+                    if (response.data.reload || authCode) {
                         console.log('WPSMD: Reloading page to refresh state');
                         // Remove code from URL and reload to refresh the page state
                         const newUrl = window.location.href.split('?')[0];
