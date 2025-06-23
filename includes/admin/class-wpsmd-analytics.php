@@ -206,10 +206,30 @@ class WPSMD_Analytics {
             
             // Set redirect URI to admin-ajax.php endpoint with action parameter
             // IMPORTANT: This exact URL must be added to authorized redirect URIs in Google Cloud Console
-            $redirect_uri = site_url('wp-admin/admin-ajax.php');
+            $protocol = is_ssl() ? 'https://' : 'http://';
+            $redirect_uri = $protocol . $_SERVER['HTTP_HOST'] . '/wp-admin/admin-ajax.php';
             $client->setRedirectUri($redirect_uri);
-            error_log('WPSMD: Full redirect URI with protocol: ' . $redirect_uri);
-            error_log('WPSMD: Setting redirect URI to: ' . $redirect_uri);
+            error_log('WPSMD: Protocol: ' . $protocol);
+            error_log('WPSMD: Host: ' . $_SERVER['HTTP_HOST']);
+            error_log('WPSMD: Full redirect URI: ' . $redirect_uri);
+            
+            // Verify the protocol matches what's configured in Google Cloud Console
+            if (!is_ssl() && strpos($redirect_uri, 'http://') === 0) {
+                error_log('WPSMD: Warning - Using non-HTTPS URL. Make sure this matches Google Cloud Console settings.');
+            }
+            error_log('WPSMD: Current request URI: ' . $_SERVER['REQUEST_URI']);
+            error_log('WPSMD: Current request scheme: ' . $_SERVER['REQUEST_SCHEME']);
+            error_log('WPSMD: Current HTTP host: ' . $_SERVER['HTTP_HOST']);
+            error_log('WPSMD: Current request method: ' . $_SERVER['REQUEST_METHOD']);
+            if (isset($_GET['code'])) {
+                error_log('WPSMD: Received code parameter: ' . $_GET['code']);
+            }
+            if (isset($_GET['error'])) {
+                error_log('WPSMD: Received error: ' . $_GET['error']);
+                if (isset($_GET['error_description'])) {
+                    error_log('WPSMD: Error description: ' . $_GET['error_description']);
+                }
+            }
             
             // Add state parameter to track the original request
             $state = array(
@@ -275,7 +295,19 @@ class WPSMD_Analytics {
 
                 try {
                     error_log('WPSMD: Received authorization code, attempting to fetch token');
-                    $token = $client->fetchAccessTokenWithAuthCode($_GET['code']);
+                    error_log('WPSMD: Authorization code: ' . $_GET['code']);
+                    
+                    try {
+                        $token = $client->fetchAccessTokenWithAuthCode($_GET['code']);
+                    } catch (Google_Service_Exception $e) {
+                        $error_data = json_decode($e->getMessage(), true);
+                        error_log('WPSMD: Google Service Exception: ' . print_r($error_data, true));
+                        if (isset($error_data['error']['message'])) {
+                            wp_send_json_error(array('message' => 'Google API Error: ' . $error_data['error']['message']));
+                            return;
+                        }
+                        throw $e;
+                    }
                     
                     if (isset($token['error'])) {
                         error_log('WPSMD: Token fetch error: ' . $token['error']);
