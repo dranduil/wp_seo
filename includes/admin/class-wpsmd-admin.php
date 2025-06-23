@@ -64,6 +64,7 @@ class WPSMD_Admin {
                 'invalidFileError' => __('Invalid settings file', 'wp-seo-meta-descriptions')
             ));
             wp_enqueue_style( 'wpsmd-bulk-editor-css', plugin_dir_url( __FILE__ ) . '../../assets/css/bulk-editor.css', array(), WPSMD_VERSION );
+        }
     }
 
     /**
