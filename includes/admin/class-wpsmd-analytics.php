@@ -230,10 +230,14 @@ class WPSMD_Analytics {
                 wp_send_json_error(array('message' => 'Internal server error: Could not encode state'));
                 return;
             }
-            // Use URL-safe base64 encoding
+            // Use URL-safe base64 encoding with proper padding
             $state_base64 = rtrim(strtr(base64_encode($state_json), '+/', '-_'), '=');
             error_log('WPSMD: URL-safe state parameter generated: ' . $state_base64);
-            $client->setState($state_base64);
+            
+            // URL encode the state parameter to ensure safe transmission
+            $encoded_state = urlencode($state_base64);
+            error_log('WPSMD: URL-encoded state parameter: ' . $encoded_state);
+            $client->setState($encoded_state);
             error_log('WPSMD: State parameter set: ' . print_r($state, true));
             
             // Log the authorization URL for debugging
@@ -329,8 +333,12 @@ class WPSMD_Analytics {
                 try {
                     error_log('WPSMD: Raw state parameter received: ' . $state);
                     
+                    // URL decode the state parameter first
+                    $decoded_url_state = urldecode($state);
+                    error_log('WPSMD: URL-decoded state: ' . $decoded_url_state);
+                    
                     // Convert URL-safe base64 back to standard base64
-                    $base64_state = str_pad(strtr($state, '-_', '+/'), strlen($state) % 4, '=', STR_PAD_RIGHT);
+                    $base64_state = str_pad(strtr($decoded_url_state, '-_', '+/'), strlen($decoded_url_state) % 4, '=', STR_PAD_RIGHT);
                     error_log('WPSMD: Converted to standard base64: ' . $base64_state);
                     
                     $decoded_state = base64_decode($base64_state, true);
@@ -397,8 +405,17 @@ class WPSMD_Analytics {
                         // Ensure redirect URI matches exactly
                         $redirect_uri = untrailingslashit(admin_url('admin-ajax.php'));
                         $client->setRedirectUri($redirect_uri);
+                        error_log('WPSMD: Final redirect URI before token fetch: ' . $redirect_uri);
                         
+                        // Verify client configuration before token fetch
+                        error_log('WPSMD: Client configuration before token fetch:');
+                        error_log('WPSMD: - Client ID: ' . substr($client->getClientId(), 0, 8) . '...');
+                        error_log('WPSMD: - Redirect URI: ' . $client->getRedirectUri());
+                        error_log('WPSMD: - Auth Code: ' . substr($auth_code, 0, 8) . '...');
+                        
+                        // Fetch the token
                         $token = $client->fetchAccessTokenWithAuthCode($auth_code);
+                        error_log('WPSMD: Token fetch attempt completed');
                         error_log('WPSMD: Raw token response: ' . print_r($token, true));
                     } catch (Exception $e) {
                         error_log('WPSMD: Exception while fetching token: ' . $e->getMessage());
@@ -419,9 +436,9 @@ class WPSMD_Analytics {
                                     $error_message = $error_data['error']['message'];
                                 }
                             }
-                        } else if (strpos($error_message, '400') !== false) {
-                            error_log('WPSMD: 400 Bad Request detected');
-                            $error_message = 'Invalid request. Please check the redirect URI in Google Cloud Console matches exactly: ' . $redirect_uri;
+                        } else if (strpos($error_message, '400') !== false || strpos($error_message, 'redirect_uri_mismatch') !== false) {
+                            error_log('WPSMD: 400 Bad Request or redirect_uri_mismatch detected');
+                            $error_message = 'Invalid request. Please ensure the following redirect URI is exactly configured in Google Cloud Console OAuth settings (Authorized redirect URIs):\n' . $redirect_uri . '\n\nCommon issues:\n1. Missing or incorrect redirect URI in Google Cloud Console\n2. Extra parameters or trailing slashes in the configured URI\n3. HTTP/HTTPS mismatch';
                         }
                         
                         wp_send_json_error(array(

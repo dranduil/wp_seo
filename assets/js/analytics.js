@@ -153,14 +153,14 @@
                         window.location.href = newUrl;
                     } else {
                         console.log('WPSMD: No redirect/reload needed');
-                        location.reload();
-                    }
-                } else {
-                    showNotice(response.data.message || wpsmdAnalytics.i18n.verifyError, 'error');
-                    if (authCode) {
-                        // Remove failed auth code from URL
-                        const newUrl = window.location.href.split('?')[0];
-                        window.history.replaceState({}, document.title, newUrl);
+                        showNotice(response.data.message || wpsmdAnalytics.i18n.verifyError, 'error');
+                        if (authCode) {
+                            // Remove failed auth code from URL
+                            const newUrl = window.location.href.split('?')[0];
+                            window.history.replaceState({}, document.title, newUrl);
+                        } else {
+                            location.reload();
+                        }
                     }
                 }
             },
