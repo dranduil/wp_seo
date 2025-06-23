@@ -11,10 +11,20 @@ if (!defined('ABSPATH')) {
         <div class="wpsmd-analytics-card wpsmd-gsc-status">
             <h2><?php _e('Google Search Console', 'wp-seo-meta-descriptions'); ?></h2>
             <div class="wpsmd-gsc-connection">
-                <p class="description"><?php _e('Connect to Google Search Console to view your search performance data.', 'wp-seo-meta-descriptions'); ?></p>
-                <button class="button button-primary" id="wpsmd-verify-gsc">
-                    <?php _e('Connect to Search Console', 'wp-seo-meta-descriptions'); ?>
-                </button>
+                <?php
+                $token = get_option('wpsmd_gsc_token');
+                if (empty($token)) :
+                ?>
+                    <p class="description"><?php _e('Connect to Google Search Console to view your search performance data.', 'wp-seo-meta-descriptions'); ?></p>
+                    <button class="button button-primary" id="wpsmd-verify-gsc">
+                        <?php _e('Connect to Search Console', 'wp-seo-meta-descriptions'); ?>
+                    </button>
+                <?php else : ?>
+                    <p class="description wpsmd-connected"><?php _e('Connected to Google Search Console', 'wp-seo-meta-descriptions'); ?></p>
+                    <button class="button" id="wpsmd-disconnect-gsc">
+                        <?php _e('Disconnect', 'wp-seo-meta-descriptions'); ?>
+                    </button>
+                <?php endif; ?>
             </div>
         </div>
 

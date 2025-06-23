@@ -22,9 +22,25 @@ class WPSMD_Analytics {
         add_action('admin_menu', array($this, 'add_analytics_menu'));
         add_action('admin_enqueue_scripts', array($this, 'enqueue_analytics_scripts'));
         add_action('wp_ajax_wpsmd_verify_gsc', array($this, 'verify_search_console'));
+        add_action('wp_ajax_wpsmd_disconnect_gsc', array($this, 'disconnect_search_console'));
         add_action('wp_ajax_wpsmd_get_search_analytics', array($this, 'get_search_analytics'));
         add_action('wp_ajax_wpsmd_get_crawl_errors', array($this, 'get_crawl_errors'));
         add_action('admin_notices', array($this, 'check_dependencies'));
+    }
+
+    /**
+     * Disconnect from Google Search Console.
+     */
+    public function disconnect_search_console() {
+        check_ajax_referer('wpsmd_analytics_nonce', 'nonce');
+
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => __('Permission denied', 'wp-seo-meta-descriptions')));
+            return;
+        }
+
+        delete_option('wpsmd_gsc_token');
+        wp_send_json_success(array('message' => __('Successfully disconnected from Google Search Console', 'wp-seo-meta-descriptions')));
     }
 
     /**
@@ -83,7 +99,12 @@ class WPSMD_Analytics {
                 'verifySuccess' => __('Successfully connected to Google Search Console', 'wp-seo-meta-descriptions'),
                 'verifyError' => __('Error connecting to Google Search Console', 'wp-seo-meta-descriptions'),
                 'loadingData' => __('Loading data...', 'wp-seo-meta-descriptions'),
-                'errorLoadingData' => __('Error loading data', 'wp-seo-meta-descriptions')
+                'errorLoadingData' => __('Error loading data', 'wp-seo-meta-descriptions'),
+                'authRequired' => __('Please authorize access to Google Search Console', 'wp-seo-meta-descriptions'),
+                'tokenExpired' => __('Authentication expired. Please reconnect to Google Search Console.', 'wp-seo-meta-descriptions'),
+                'alreadyConnected' => __('Already connected to Google Search Console', 'wp-seo-meta-descriptions'),
+                'connectionRefreshed' => __('Successfully refreshed Google Search Console connection', 'wp-seo-meta-descriptions'),
+                'disconnected' => __('Successfully disconnected from Google Search Console', 'wp-seo-meta-descriptions')
             )
         ));
     }
@@ -159,17 +180,53 @@ class WPSMD_Analytics {
             $client->setRedirectUri(admin_url('admin.php?page=wpsmd-analytics'));
             $client->addScope('https://www.googleapis.com/auth/webmasters.readonly');
 
+            // Check if we already have a token
+            $existing_token = get_option('wpsmd_gsc_token');
+            if (!empty($existing_token)) {
+                $client->setAccessToken($existing_token);
+                
+                if ($client->isAccessTokenExpired()) {
+                    if ($client->getRefreshToken()) {
+                        try {
+                            $client->fetchAccessTokenWithRefreshToken($client->getRefreshToken());
+                            update_option('wpsmd_gsc_token', $client->getAccessToken());
+                            wp_send_json_success(array('message' => __('Successfully refreshed Google Search Console connection', 'wp-seo-meta-descriptions')));
+                            return;
+                        } catch (Exception $e) {
+                            error_log('WPSMD: Token refresh failed: ' . $e->getMessage());
+                            delete_option('wpsmd_gsc_token');
+                        }
+                    } else {
+                        error_log('WPSMD: Token expired and no refresh token available');
+                        delete_option('wpsmd_gsc_token');
+                    }
+                } else {
+                    wp_send_json_success(array('message' => __('Already connected to Google Search Console', 'wp-seo-meta-descriptions')));
+                    return;
+                }
+            }
+
             // Handle the OAuth 2.0 flow
-            if (!isset($_GET['code'])) {
+            if (isset($_GET['code'])) {
+                try {
+                    $token = $client->fetchAccessTokenWithAuthCode($_GET['code']);
+                    if (isset($token['error'])) {
+                        error_log('WPSMD: Token fetch error: ' . $token['error']);
+                        wp_send_json_error(array('message' => __('Error fetching access token. Please try again.', 'wp-seo-meta-descriptions')));
+                        return;
+                    }
+                    update_option('wpsmd_gsc_token', $token);
+                    wp_send_json_success(array('message' => __('Successfully connected to Google Search Console', 'wp-seo-meta-descriptions')));
+                } catch (Exception $e) {
+                    error_log('WPSMD: Token fetch exception: ' . $e->getMessage());
+                    wp_send_json_error(array('message' => __('Error connecting to Google Search Console. Please try again.', 'wp-seo-meta-descriptions')));
+                }
+            } else {
                 $auth_url = $client->createAuthUrl();
                 wp_send_json_success(array(
                     'auth_url' => $auth_url,
                     'message' => __('Please authorize access to Google Search Console', 'wp-seo-meta-descriptions')
                 ));
-            } else {
-                $token = $client->fetchAccessTokenWithAuthCode($_GET['code']);
-                update_option('wpsmd_gsc_token', $token);
-                wp_send_json_success(array('message' => __('Successfully connected to Google Search Console', 'wp-seo-meta-descriptions')));
             }
         } catch (Exception $e) {
             wp_send_json_error(array('message' => $e->getMessage()));

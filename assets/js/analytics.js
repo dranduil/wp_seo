@@ -12,7 +12,42 @@ jQuery(document).ready(function($) {
     // Bind event handlers
     function bindEvents() {
         $('#wpsmd-verify-gsc').on('click', verifySearchConsole);
+        $('#wpsmd-disconnect-gsc').on('click', disconnectSearchConsole);
     }
+
+    // Disconnect from Google Search Console
+    function disconnectSearchConsole() {
+        const $button = $('#wpsmd-disconnect-gsc');
+        const originalText = $button.text();
+
+        $button.prop('disabled', true)
+               .text(wpsmdAnalytics.i18n.loadingData);
+
+        $.ajax({
+            url: wpsmdAnalytics.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'wpsmd_disconnect_gsc',
+                nonce: wpsmdAnalytics.nonce
+            },
+            success: function(response) {
+                console.log('WPSMD: Disconnect response:', response);
+                if (response.success) {
+                    showNotice(response.data.message, 'success');
+                    location.reload(); // Reload to update UI
+                } else {
+                    showNotice(response.data.message || wpsmdAnalytics.i18n.verifyError, 'error');
+                }
+            },
+            error: function(jqXHR, textStatus, errorThrown) {
+                console.error('WPSMD: AJAX error:', textStatus, errorThrown);
+                console.error('WPSMD: Response:', jqXHR.responseText);
+                showNotice(wpsmdAnalytics.i18n.verifyError + ': ' + textStatus, 'error');
+            },
+            complete: function() {
+                $button.prop('disabled', false).text(originalText);
+            }
+        });
 
     // Verify Google Search Console connection
     function verifySearchConsole() {
@@ -22,23 +57,45 @@ jQuery(document).ready(function($) {
         $button.prop('disabled', true)
                .text(wpsmdAnalytics.i18n.loadingData);
 
-        console.log('WPSMD: Sending verify request with nonce:', wpsmdAnalytics.nonce);
+        // Check for authorization code in URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const authCode = urlParams.get('code');
+        const error = urlParams.get('error');
+
+        if (error) {
+            showNotice(wpsmdAnalytics.i18n.verifyError + ': ' + error, 'error');
+            $button.prop('disabled', false).text(originalText);
+            return;
+        }
 
         $.ajax({
             url: wpsmdAnalytics.ajax_url,
             type: 'POST',
             data: {
                 action: 'wpsmd_verify_gsc',
-                nonce: wpsmdAnalytics.nonce
+                nonce: wpsmdAnalytics.nonce,
+                code: authCode
             },
             success: function(response) {
                 console.log('WPSMD: Verify response:', response);
                 if (response.success) {
-                    showNotice(wpsmdAnalytics.i18n.verifySuccess, 'success');
-                    loadAnalyticsData();
+                    showNotice(response.data.message, 'success');
+                    if (response.data.auth_url) {
+                        window.location.href = response.data.auth_url;
+                    } else if (authCode) {
+                        // Remove code from URL and reload to refresh the page state
+                        const newUrl = window.location.href.split('?')[0];
+                        window.location.href = newUrl;
+                    } else {
+                        location.reload();
+                    }
                 } else {
-                    console.error('WPSMD: Verification failed:', response.data ? response.data.message : 'Unknown error');
-                    showNotice(response.data ? response.data.message : wpsmdAnalytics.i18n.verifyError, 'error');
+                    showNotice(response.data.message || wpsmdAnalytics.i18n.verifyError, 'error');
+                    if (authCode) {
+                        // Remove failed auth code from URL
+                        const newUrl = window.location.href.split('?')[0];
+                        window.history.replaceState({}, document.title, newUrl);
+                    }
                 }
             },
             error: function(jqXHR, textStatus, errorThrown) {
