@@ -206,12 +206,12 @@ class WPSMD_Analytics {
             
             // Set redirect URI to admin-ajax.php endpoint with action parameter
             // IMPORTANT: This exact URL must be added to authorized redirect URIs in Google Cloud Console
-            $protocol = is_ssl() ? 'https://' : 'http://';
-            $redirect_uri = $protocol . $_SERVER['HTTP_HOST'] . '/wp-admin/admin-ajax.php';
+            $redirect_uri = admin_url('admin-ajax.php');
+            // Remove any trailing slashes and ensure clean URL
+            $redirect_uri = untrailingslashit($redirect_uri);
             $client->setRedirectUri($redirect_uri);
-            error_log('WPSMD: Protocol: ' . $protocol);
-            error_log('WPSMD: Host: ' . $_SERVER['HTTP_HOST']);
             error_log('WPSMD: Full redirect URI: ' . $redirect_uri);
+            error_log('WPSMD: Parsed redirect URI components: ' . print_r(parse_url($redirect_uri), true));
             
             // Verify the protocol matches what's configured in Google Cloud Console
             if (!is_ssl() && strpos($redirect_uri, 'http://') === 0) {
@@ -235,9 +235,19 @@ class WPSMD_Analytics {
             $state = array(
                 'nonce' => wp_create_nonce('wpsmd_gsc_auth'),
                 'action' => 'wpsmd_verify_gsc',
-                'page' => 'wpsmd-analytics'
+                'page' => 'wpsmd-analytics',
+                'timestamp' => time(),
+                'site_url' => site_url()
             );
-            $client->setState(base64_encode(json_encode($state)));
+            $state_json = json_encode($state);
+            if ($state_json === false) {
+                error_log('WPSMD: Error encoding state JSON');
+                wp_send_json_error(array('message' => 'Internal server error: Could not encode state'));
+                return;
+            }
+            $state_base64 = base64_encode($state_json);
+            $client->setState($state_base64);
+            error_log('WPSMD: State parameter set: ' . print_r($state, true));
             
             // OAuth parameters already set above
 
@@ -277,10 +287,42 @@ class WPSMD_Analytics {
                 }
 
                 try {
-                    $state = json_decode(base64_decode($_GET['state']), true);
-                    if (!$state || !isset($state['nonce']) || !wp_verify_nonce($state['nonce'], 'wpsmd_gsc_auth')) {
-                        error_log('WPSMD: Invalid OAuth state');
+                    $state_base64 = $_GET['state'];
+                    error_log('WPSMD: Received state parameter: ' . $state_base64);
+                    
+                    $state_json = base64_decode($state_base64);
+                    if ($state_json === false) {
+                        error_log('WPSMD: Failed to decode base64 state');
+                        wp_send_json_error(array('message' => __('Invalid state format. Please try again.', 'wp-seo-meta-descriptions')));
+                        return;
+                    }
+                    error_log('WPSMD: Decoded state JSON: ' . $state_json);
+                    
+                    $state = json_decode($state_json, true);
+                    if (!$state || !is_array($state)) {
+                        error_log('WPSMD: Failed to decode state JSON');
+                        wp_send_json_error(array('message' => __('Invalid state format. Please try again.', 'wp-seo-meta-descriptions')));
+                        return;
+                    }
+                    error_log('WPSMD: Parsed state: ' . print_r($state, true));
+                    
+                    if (!isset($state['nonce']) || !wp_verify_nonce($state['nonce'], 'wpsmd_gsc_auth')) {
+                        error_log('WPSMD: Invalid state nonce');
                         wp_send_json_error(array('message' => __('Invalid OAuth state. Please try again.', 'wp-seo-meta-descriptions')));
+                        return;
+                    }
+                    
+                    // Verify site URL matches
+                    if (!isset($state['site_url']) || $state['site_url'] !== site_url()) {
+                        error_log('WPSMD: Site URL mismatch. Expected: ' . site_url() . ', Got: ' . ($state['site_url'] ?? 'not set'));
+                        wp_send_json_error(array('message' => __('Invalid site URL in state. Please try again.', 'wp-seo-meta-descriptions')));
+                        return;
+                    }
+                    
+                    // Check timestamp (optional: expire after 1 hour)
+                    if (!isset($state['timestamp']) || (time() - $state['timestamp']) > 3600) {
+                        error_log('WPSMD: State timestamp expired or invalid');
+                        wp_send_json_error(array('message' => __('Authorization request expired. Please try again.', 'wp-seo-meta-descriptions')));
                         return;
                     }
 

@@ -170,7 +170,13 @@ class WPSMD_Settings {
      * Print the Google Search Console section info.
      */
     public function print_gsc_section_info() {
+        $redirect_uri = untrailingslashit(admin_url('admin-ajax.php'));
         echo '<p>' . esc_html__('Enter your Google Search Console API credentials below. You can obtain these by creating a project in the Google Cloud Console.', 'wp-seo-meta-descriptions') . '</p>';
+        echo '<div class="notice notice-info"><p>' . sprintf(
+            /* translators: %s: Redirect URI */
+            esc_html__('Important: Add this exact URL to your Google Cloud Console\'s Authorized Redirect URIs: %s', 'wp-seo-meta-descriptions'),
+            '<code>' . esc_url($redirect_uri) . '</code>'
+        ) . '</p></div>';
     }
 
     /**
