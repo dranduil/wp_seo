@@ -213,7 +213,12 @@ class WPSMD_Analytics {
             
             // Set redirect URI to admin-ajax.php endpoint without any query parameters
             // IMPORTANT: This exact URL must be added to authorized redirect URIs in Google Cloud Console
-            $redirect_uri = untrailingslashit(admin_url('admin-ajax.php'));
+            $protocol = is_ssl() ? 'https://' : 'http://';
+            $redirect_uri = $protocol . $_SERVER['HTTP_HOST'] . '/wp-admin/admin-ajax.php';
+            error_log('WPSMD: Setting redirect URI: ' . $redirect_uri);
+            error_log('WPSMD: Current SSL status: ' . (is_ssl() ? 'true' : 'false'));
+            error_log('WPSMD: Server protocol: ' . (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) ? $_SERVER['HTTP_X_FORWARDED_PROTO'] : $_SERVER['REQUEST_SCHEME']));
+            
             $client->setRedirectUri($redirect_uri);
             
             // Add state parameter to track the original request
@@ -234,10 +239,10 @@ class WPSMD_Analytics {
             $state_base64 = rtrim(strtr(base64_encode($state_json), '+/', '-_'), '=');
             error_log('WPSMD: URL-safe state parameter generated: ' . $state_base64);
             
-            // URL encode the state parameter to ensure safe transmission
-            $encoded_state = urlencode($state_base64);
-            error_log('WPSMD: URL-encoded state parameter: ' . $encoded_state);
-            $client->setState($encoded_state);
+            // Set the state parameter directly without additional URL encoding
+            // Google's OAuth implementation will handle the URL encoding
+            $client->setState($state_base64);
+            error_log('WPSMD: State parameter set on client: ' . $state_base64);
             error_log('WPSMD: State parameter set: ' . print_r($state, true));
             
             // Log the authorization URL for debugging
@@ -337,8 +342,12 @@ class WPSMD_Analytics {
                     $decoded_url_state = urldecode($state);
                     error_log('WPSMD: URL-decoded state: ' . $decoded_url_state);
                     
+                    // Remove any URL-encoded characters that might have been double-encoded
+                    $cleaned_state = preg_replace('/%[0-9A-F]{2}/i', '', $decoded_url_state);
+                    error_log('WPSMD: Cleaned state: ' . $cleaned_state);
+                    
                     // Convert URL-safe base64 back to standard base64
-                    $base64_state = str_pad(strtr($decoded_url_state, '-_', '+/'), strlen($decoded_url_state) % 4, '=', STR_PAD_RIGHT);
+                    $base64_state = str_pad(strtr($cleaned_state, '-_', '+/'), strlen($cleaned_state) % 4, '=', STR_PAD_RIGHT);
                     error_log('WPSMD: Converted to standard base64: ' . $base64_state);
                     
                     $decoded_state = base64_decode($base64_state, true);
@@ -402,10 +411,17 @@ class WPSMD_Analytics {
                         error_log('WPSMD: Redirect URI: ' . $client->getRedirectUri());
                         error_log('WPSMD: Client ID: ' . substr($client->getClientId(), 0, 8) . '...');
                         
-                        // Ensure redirect URI matches exactly
-                        $redirect_uri = untrailingslashit(admin_url('admin-ajax.php'));
+                        // Ensure redirect URI matches exactly what was used for authorization
+                        $protocol = is_ssl() ? 'https://' : 'http://';
+                        $redirect_uri = $protocol . $_SERVER['HTTP_HOST'] . '/wp-admin/admin-ajax.php';
                         $client->setRedirectUri($redirect_uri);
-                        error_log('WPSMD: Final redirect URI before token fetch: ' . $redirect_uri);
+                        
+                        error_log('WPSMD: Final redirect URI configuration:');
+                        error_log('WPSMD: - Redirect URI: ' . $redirect_uri);
+                        error_log('WPSMD: - SSL Status: ' . (is_ssl() ? 'true' : 'false'));
+                        error_log('WPSMD: - Server Protocol: ' . (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) ? $_SERVER['HTTP_X_FORWARDED_PROTO'] : $_SERVER['REQUEST_SCHEME']));
+                        error_log('WPSMD: - HTTP_HOST: ' . $_SERVER['HTTP_HOST']);
+                        error_log('WPSMD: - REQUEST_URI: ' . $_SERVER['REQUEST_URI']);
                         
                         // Verify client configuration before token fetch
                         error_log('WPSMD: Client configuration before token fetch:');
@@ -438,7 +454,19 @@ class WPSMD_Analytics {
                             }
                         } else if (strpos($error_message, '400') !== false || strpos($error_message, 'redirect_uri_mismatch') !== false) {
                             error_log('WPSMD: 400 Bad Request or redirect_uri_mismatch detected');
-                            $error_message = 'Invalid request. Please ensure the following redirect URI is exactly configured in Google Cloud Console OAuth settings (Authorized redirect URIs):\n' . $redirect_uri . '\n\nCommon issues:\n1. Missing or incorrect redirect URI in Google Cloud Console\n2. Extra parameters or trailing slashes in the configured URI\n3. HTTP/HTTPS mismatch';
+                            error_log('WPSMD: Current redirect URI: ' . $redirect_uri);
+                            error_log('WPSMD: Request scheme: ' . $_SERVER['REQUEST_SCHEME']);
+                            error_log('WPSMD: HTTP_X_FORWARDED_PROTO: ' . (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) ? $_SERVER['HTTP_X_FORWARDED_PROTO'] : 'not set'));
+                            
+                            $protocol = is_ssl() ? 'https://' : 'http://';
+                            $expected_uri = $protocol . $_SERVER['HTTP_HOST'] . '/wp-admin/admin-ajax.php';
+                            
+                            $error_message = sprintf(
+                                'Redirect URI mismatch. Please configure the following URI exactly in your Google Cloud Console (APIs & Services > Credentials > OAuth 2.0 Client IDs > Authorized redirect URIs):\n\n%s\n\nCurrent configuration issues:\n1. Your redirect URI must match exactly (check for HTTP vs HTTPS)\n2. Remove any trailing slashes or extra parameters\n3. Verify no typos or missing characters\n\nExpected URI format: %s\nCurrent URI: %s',
+                                $expected_uri,
+                                $expected_uri,
+                                $redirect_uri
+                            );
                         }
                         
                         wp_send_json_error(array(
