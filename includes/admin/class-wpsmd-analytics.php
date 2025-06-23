@@ -191,7 +191,12 @@ class WPSMD_Analytics {
             $client = new Google_Client();
             $client->setClientId($client_id);
             $client->setClientSecret($client_secret);
-            $client->setScopes(array('https://www.googleapis.com/auth/webmasters.readonly'));
+            $client->setScopes(array(
+                'https://www.googleapis.com/auth/webmasters',
+                'https://www.googleapis.com/auth/webmasters.readonly',
+                'https://www.googleapis.com/auth/siteverification',
+                'https://www.googleapis.com/auth/siteverification.verify_only'
+            ));
             $client->setAccessType('offline');
             $client->setPrompt('consent');
             
