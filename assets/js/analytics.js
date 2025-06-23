@@ -39,9 +39,19 @@
                 }
             },
             error: function(jqXHR, textStatus, errorThrown) {
-                console.error('WPSMD: AJAX error:', textStatus, errorThrown);
-                console.error('WPSMD: Response:', jqXHR.responseText);
-                showNotice(wpsmdAnalytics.i18n.verifyError + ': ' + textStatus, 'error');
+                console.error('WPSMD: AJAX error details:', {
+                    status: jqXHR.status,
+                    statusText: jqXHR.statusText,
+                    responseText: jqXHR.responseText,
+                    textStatus: textStatus,
+                    errorThrown: errorThrown,
+                    requestData: {
+                        action: 'wpsmd_verify_gsc',
+                        nonce: wpsmdAnalytics.nonce,
+                        code: authCode
+                    }
+                });
+                showNotice(wpsmdAnalytics.i18n.verifyError + ': ' + (jqXHR.responseText || textStatus), 'error');
             },
             complete: function() {
                 $button.prop('disabled', false).text(originalText);
@@ -72,11 +82,24 @@
             url: wpsmdAnalytics.ajax_url,
             type: 'POST',
             data: {
+                action: 'wpsmd_verify_gsc',
                 nonce: wpsmdAnalytics.nonce,
                 code: authCode
             },
             success: function(response) {
                 console.log('WPSMD: Verify response:', response);
+                // Handle empty or '0' response
+                if (response === '0' || response === 0) {
+                    console.error('WPSMD: Empty or zero response received');
+                    showNotice(wpsmdAnalytics.i18n.verifyError + ': Invalid server response', 'error');
+                    return;
+                }
+                // Validate response structure
+                if (typeof response !== 'object') {
+                    console.error('WPSMD: Invalid response type:', typeof response);
+                    showNotice(wpsmdAnalytics.i18n.verifyError + ': Invalid response format', 'error');
+                    return;
+                }
                 if (response.success) {
                     showNotice(response.data.message, 'success');
                     if (response.data.auth_url) {
@@ -129,7 +152,18 @@
                 }
             },
             error: function(jqXHR, textStatus, errorThrown) {
-                console.error('WPSMD: Connection check error:', textStatus, errorThrown);
+                console.error('WPSMD: Connection check error details:', {
+                    status: jqXHR.status,
+                    statusText: jqXHR.statusText,
+                    responseText: jqXHR.responseText,
+                    textStatus: textStatus,
+                    errorThrown: errorThrown,
+                    requestData: {
+                        action: 'wpsmd_verify_gsc',
+                        nonce: wpsmdAnalytics.nonce
+                    }
+                });
+                showNotice(wpsmdAnalytics.i18n.verifyError + ': ' + (jqXHR.responseText || textStatus), 'error');
             }
         });
     }
