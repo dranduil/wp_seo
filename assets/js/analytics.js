@@ -39,6 +39,31 @@
                 }
             },
             error: function(jqXHR, textStatus, errorThrown) {
+                // Enhanced error logging
+                const errorDetails = {
+                    status: jqXHR.status,
+                    statusText: jqXHR.statusText,
+                    responseText: jqXHR.responseText,
+                    textStatus: textStatus,
+                    errorThrown: errorThrown,
+                    requestData: requestData,
+                    url: wpsmdAnalytics.ajax_url
+                };
+
+                // Try to parse response JSON if available
+                try {
+                    errorDetails.parsedResponse = JSON.parse(jqXHR.responseText);
+                } catch (e) {
+                    errorDetails.parseError = e.message;
+                }
+
+                console.error('WPSMD: Verification error details:', errorDetails);
+
+                // Check for specific error conditions
+                if (jqXHR.status === 400) {
+                    console.warn('WPSMD: Received 400 Bad Request - This might indicate an issue with the OAuth state parameter or invalid request format');
+                }
+
                 console.error('WPSMD: Disconnect error details:', {
                     status: jqXHR.status,
                     statusText: jqXHR.statusText,
@@ -50,6 +75,10 @@
                         nonce: wpsmdAnalytics.nonce
                     }
                 });
+                
+                // Log additional request details for debugging
+                console.log('WPSMD: Request URL:', wpsmdAnalytics.ajax_url);
+                console.log('WPSMD: Request Headers:', jqXHR.getAllResponseHeaders());
 
                 let errorMessage = wpsmdAnalytics.i18n.verifyError;
                 
@@ -85,14 +114,69 @@
         const error = urlParams.get('error');
 
         if (error) {
-            showNotice(wpsmdAnalytics.i18n.verifyError + ': ' + error, 'error');
+            const errorDescription = urlParams.get('error_description') || error;
+            console.error('WPSMD: OAuth error:', {
+                error: error,
+                error_description: errorDescription,
+                state: state
+            });
+            showNotice(wpsmdAnalytics.i18n.verifyError + ': ' + errorDescription, 'error');
             $button.prop('disabled', false).text(originalText);
             return;
         }
 
         // If we have both code and state, we're handling the OAuth callback
         if (authCode && state) {
-            console.log('WPSMD: Handling OAuth callback with code and state');
+            console.log('WPSMD: Handling OAuth callback with:', {
+                code: authCode,
+                state: state,
+                decodedState: decodeURIComponent(state)
+            });
+
+            // Validate state parameter format
+            try {
+                const decodedState = decodeURIComponent(state);
+                const stateData = JSON.parse(atob(decodedState));
+                console.log('WPSMD: Parsed state data:', stateData);
+
+                // Validate required state properties
+                if (!stateData.nonce || !stateData.action || !stateData.timestamp) {
+                    throw new Error('Missing required state parameters');
+                }
+
+                // Check if state has expired (30 minutes)
+                const stateTime = new Date(stateData.timestamp).getTime();
+                const currentTime = new Date().getTime();
+                const timeLimit = 30 * 60 * 1000; // 30 minutes in milliseconds
+
+                if (currentTime - stateTime > timeLimit) {
+                    throw new Error('State parameter has expired');
+                }
+            } catch (e) {
+                console.error('WPSMD: State validation error:', e);
+                showNotice(wpsmdAnalytics.i18n.verifyError + ': Invalid or expired state parameter', 'error');
+                $button.prop('disabled', false).text(originalText);
+                return;
+            }
+        }
+
+        // Clean and validate state parameter
+        function cleanStateParameter(state) {
+            if (!state) return '';
+            // Remove any double encoding
+            let cleanedState = state;
+            try {
+                // Try to decode until we can't anymore (handles multiple encodings)
+                while (true) {
+                    const decoded = decodeURIComponent(cleanedState);
+                    if (decoded === cleanedState) break;
+                    cleanedState = decoded;
+                }
+            } catch (e) {
+                console.warn('WPSMD: State parameter decoding error:', e);
+                return state; // Return original if decoding fails
+            }
+            return cleanedState;
         }
 
         // Log request parameters for debugging
@@ -100,14 +184,67 @@
             action: 'wpsmd_verify_gsc',
             nonce: wpsmdAnalytics.nonce,
             code: authCode,
-            state: state
+            state: cleanStateParameter(state)
         };
         console.log('WPSMD: Sending request with data:', requestData);
+
+        // Log complete request configuration
+        console.log('WPSMD: Complete request configuration:', {
+            url: wpsmdAnalytics.ajax_url,
+            type: 'POST',
+            data: requestData,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        });
 
         $.ajax({
             url: wpsmdAnalytics.ajax_url,
             type: 'POST',
             data: requestData,
+            beforeSend: function(xhr) {
+                console.log('WPSMD: Request headers being sent:', xhr.getAllRequestHeaders?.() || 'Headers not available');
+            },
+            error: function(jqXHR, textStatus, errorThrown) {
+                // Enhanced error logging
+                const errorDetails = {
+                    status: jqXHR.status,
+                    statusText: jqXHR.statusText,
+                    responseText: jqXHR.responseText,
+                    textStatus: textStatus,
+                    errorThrown: errorThrown,
+                    requestData: requestData,
+                    url: wpsmdAnalytics.ajax_url
+                };
+
+                console.error('WPSMD: Verification error details:', errorDetails);
+
+                let errorMessage = wpsmdAnalytics.i18n.verifyError;
+                let details = '';
+
+                // Try to parse response JSON if available
+                try {
+                    const errorResponse = JSON.parse(jqXHR.responseText);
+                    if (errorResponse.data && errorResponse.data.message) {
+                        errorMessage = errorResponse.data.message;
+                    }
+                    
+                    // Add detailed error information
+                    if (errorResponse.data && errorResponse.data.debug_info) {
+                        details = errorResponse.data.debug_info;
+                    }
+                } catch (e) {
+                    console.warn('WPSMD: Could not parse error response:', e);
+                }
+
+                // Add specific guidance for 400 Bad Request
+                if (jqXHR.status === 400) {
+                    details = 'This might be due to an invalid OAuth state parameter or expired authorization. Please try authenticating again.';
+                }
+
+                showNotice(errorMessage, 'error', details);
+                $button.prop('disabled', false).text(originalText);
+            },
             success: function(response) {
                 console.log('WPSMD: Verify response:', response);
                 
@@ -377,10 +514,14 @@
     }
 
     // Show admin notice
-    function showNotice(message, type) {
+    function showNotice(message, type, details = '') {
         // Convert newlines to <br> tags for proper HTML display
         const formattedMessage = message.replace(/\n/g, '<br>');
-        const $notice = $('<div class="notice notice-' + type + ' is-dismissible"><p>' + formattedMessage + '</p></div>')
+        let displayMessage = formattedMessage;
+        if (details) {
+            displayMessage += '<br><small class="notice-details">' + details + '</small>';
+        }
+        const $notice = $('<div class="notice notice-' + type + ' is-dismissible"><p>' + displayMessage + '</p></div>')
             .hide()
             .insertAfter('.wrap h1')
             .slideDown();
@@ -394,7 +535,7 @@
             $notice.slideUp(function() {
                 $(this).remove();
             });
-        }, 3000);
+        }, 30000);
     }
 
     // Escape HTML
