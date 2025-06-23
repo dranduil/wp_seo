@@ -156,6 +156,29 @@ class WPSMD_Settings {
      *
      * @param array $input Contains all settings fields as array keys.
      */
+    /**
+     * Print the Google Search Console section info.
+     */
+    public function print_gsc_section_info() {
+        echo '<p>' . esc_html__('Enter your Google Search Console API credentials below. You can obtain these by creating a project in the Google Cloud Console.', 'wp-seo-meta-descriptions') . '</p>';
+    }
+
+    /**
+     * Callback for the GSC Client ID field.
+     */
+    public function gsc_client_id_callback() {
+        $value = isset($this->options['gsc_client_id']) ? $this->options['gsc_client_id'] : '';
+        echo '<input type="text" id="gsc_client_id" name="wpsmd_options[gsc_client_id]" value="' . esc_attr($value) . '" class="regular-text" />';
+    }
+
+    /**
+     * Callback for the GSC Client Secret field.
+     */
+    public function gsc_client_secret_callback() {
+        $value = isset($this->options['gsc_client_secret']) ? $this->options['gsc_client_secret'] : '';
+        echo '<input type="password" id="gsc_client_secret" name="wpsmd_options[gsc_client_secret]" value="' . esc_attr($value) . '" class="regular-text" />';
+    }
+
     public function sanitize_settings( $input ) {
         $new_input = array();
         if ( isset( $input['openai_api_key'] ) ) {
