@@ -117,8 +117,9 @@ class WPSMD_Analytics {
             return;
         }
 
-        // Show success message if just connected
-        if (isset($_GET['connection']) && $_GET['connection'] === 'success') {
+        // Show success message if just connected and state is valid
+        if (isset($_GET['connection']) && $_GET['connection'] === 'success' &&
+            isset($_GET['state']) && wp_verify_nonce($_GET['state'], 'wpsmd_gsc_success')) {
             add_settings_error(
                 'wpsmd_messages',
                 'wpsmd_connection_success',
@@ -190,9 +191,20 @@ class WPSMD_Analytics {
             $client = new Google_Client();
             $client->setClientId($client_id);
             $client->setClientSecret($client_secret);
-            // Set redirect URI to admin-ajax.php endpoint
-            $client->setRedirectUri(admin_url('admin-ajax.php'));
-            error_log('WPSMD: Setting redirect URI to: ' . admin_url('admin-ajax.php'));
+            // Set redirect URI to admin-ajax.php endpoint with action parameter
+            $redirect_uri = add_query_arg(
+                array(
+                    'action' => 'wpsmd_verify_gsc',
+                    'page' => 'wpsmd-analytics'
+                ),
+                admin_url('admin-ajax.php')
+            );
+            $client->setRedirectUri($redirect_uri);
+            error_log('WPSMD: Setting redirect URI to: ' . $redirect_uri);
+            
+            // Set additional OAuth parameters
+            $client->setState(wp_create_nonce('wpsmd_gsc_oauth'));
+            $client->setPrompt('consent');
             $client->addScope('https://www.googleapis.com/auth/webmasters.readonly');
 
             // Check if we already have a token
@@ -223,6 +235,13 @@ class WPSMD_Analytics {
 
             // Handle the OAuth 2.0 flow
             if (isset($_GET['code'])) {
+                // Verify state parameter to prevent CSRF
+                if (!isset($_GET['state']) || !wp_verify_nonce($_GET['state'], 'wpsmd_gsc_oauth')) {
+                    error_log('WPSMD: Invalid OAuth state');
+                    wp_send_json_error(array('message' => __('Invalid OAuth state. Please try again.', 'wp-seo-meta-descriptions')));
+                    return;
+                }
+
                 try {
                     error_log('WPSMD: Received authorization code, attempting to fetch token');
                     $token = $client->fetchAccessTokenWithAuthCode($_GET['code']);
@@ -265,7 +284,15 @@ class WPSMD_Analytics {
                     
                     // If this is the OAuth callback (has code parameter), redirect to the analytics page
                     if (isset($_GET['code'])) {
-                        wp_redirect(admin_url('tools.php?page=wpsmd-analytics&connection=success'));
+                        $return_url = add_query_arg(
+                            array(
+                                'page' => 'wpsmd-analytics',
+                                'connection' => 'success',
+                                'state' => wp_create_nonce('wpsmd_gsc_success')
+                            ),
+                            admin_url('tools.php')
+                        );
+                        wp_redirect($return_url);
                         exit;
                     }
                     
