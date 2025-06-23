@@ -252,30 +252,82 @@ class WPSMD_Analytics {
                 'timestamp' => time(),
                 'site_url' => site_url()
             );
-            $state_json = json_encode($state);
+            
+            // Verify all values are properly encoded strings
+            foreach ($state as $key => $value) {
+                if (!is_string($value) && !is_int($value)) {
+                    error_log(sprintf('WPSMD: Invalid state value type for %s: %s', $key, gettype($value)));
+                    wp_send_json_error(array('message' => 'Internal server error: Invalid state value type'));
+                    return;
+                }
+            }
+            
+            // Encode with error checking
+            $state_json = json_encode($state, JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION);
             if ($state_json === false) {
-                error_log('WPSMD: Error encoding state JSON');
+                error_log('WPSMD: Error encoding state JSON - ' . json_last_error_msg());
+                error_log('WPSMD: State array contents: ' . print_r($state, true));
                 wp_send_json_error(array('message' => 'Internal server error: Could not encode state'));
                 return;
             }
-            // Generate base64 encoded state with proper padding
+            
+            // Verify the encoded JSON can be decoded
+            $test_decode = json_decode($state_json, true);
+            if ($test_decode === null) {
+                error_log('WPSMD: Error - Generated JSON is invalid: ' . json_last_error_msg());
+                error_log('WPSMD: Generated JSON: ' . $state_json);
+                wp_send_json_error(array('message' => 'Internal server error: Generated invalid JSON'));
+                return;
+            }
+            // Generate base64 encoded state
             $state_base64 = base64_encode($state_json);
             error_log('WPSMD: Initial base64 state: ' . $state_base64);
+            error_log('WPSMD: Initial state JSON: ' . $state_json);
             
-            // Convert to URL-safe base64 but maintain padding
+            // Ensure proper base64 padding
+            $padding_length = strlen($state_base64) % 4;
+            if ($padding_length) {
+                $state_base64 .= str_repeat('=', 4 - $padding_length);
+            }
+            
+            // Convert to URL-safe base64
             $state_base64_urlsafe = strtr($state_base64, '+/', '-_');
             error_log('WPSMD: URL-safe state parameter generated: ' . $state_base64_urlsafe);
             
-            // Validate the state parameter can be decoded correctly
-            $test_decode = base64_decode(strtr($state_base64_urlsafe, '-_', '+/'));
-            $test_json = json_decode($test_decode);
-            if ($test_json === null) {
-                error_log('WPSMD: Error - State parameter validation failed');
-                error_log('WPSMD: JSON decode error: ' . json_last_error_msg());
+            // Validate the state parameter
+            try {
+                // Convert back to standard base64
+                $test_base64 = strtr($state_base64_urlsafe, '-_', '+/');
+                error_log('WPSMD: Validation - converted back to standard base64: ' . $test_base64);
+                
+                // Attempt decode
+                $test_decode = base64_decode($test_base64, true);
+                if ($test_decode === false) {
+                    throw new Exception('Base64 decode failed');
+                }
+                error_log('WPSMD: Validation - base64 decoded: ' . $test_decode);
+                
+                // Verify JSON structure
+                $test_json = json_decode($test_decode, true);
+                if ($test_json === null) {
+                    throw new Exception('JSON decode failed: ' . json_last_error_msg());
+                }
+                error_log('WPSMD: Validation - JSON decoded: ' . print_r($test_json, true));
+                
+                // Verify all required fields are present
+                foreach (['nonce', 'action', 'timestamp', 'site_url'] as $required_field) {
+                    if (!isset($test_json[$required_field])) {
+                        throw new Exception('Missing required field: ' . $required_field);
+                    }
+                }
+                
+                error_log('WPSMD: State parameter validation successful');
+            } catch (Exception $e) {
+                error_log('WPSMD: State parameter validation failed: ' . $e->getMessage());
+                error_log('WPSMD: Original state JSON: ' . $state_json);
                 wp_send_json_error(array('message' => 'Internal server error: Invalid state parameter generation'));
                 return;
             }
-            error_log('WPSMD: State parameter validation successful');
             
             // Set the validated state parameter
             $client->setState($state_base64_urlsafe);

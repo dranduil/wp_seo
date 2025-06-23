@@ -151,38 +151,55 @@
 
                     // Attempt to decode
                     const decoded = atob(standardBase64);
-                    console.log('WPSMD: Base64 decoded result:', decoded);
+                    console.log('WPSMD: Base64 decoded result length:', decoded.length);
 
                     // Parse JSON
                     stateData = JSON.parse(decoded);
-                    console.log('WPSMD: Successfully parsed state data:', stateData);
+                    console.log('WPSMD: Successfully parsed state data:', {
+                        nonce: stateData.nonce ? 'present' : 'missing',
+                        action: stateData.action,
+                        timestamp: stateData.timestamp,
+                        site_url: stateData.site_url ? 'present' : 'missing'
+                    });
                 } catch (e) {
-                    console.error('WPSMD: State parameter processing failed:', e);
-                    throw new Error('Failed to process state parameter');
+                    console.error('WPSMD: State parameter processing failed:', {
+                        error: e.message,
+                        type: e.name,
+                        decodedLength: decoded ? decoded.length : 0
+                    });
+                    throw new Error(`Failed to process state parameter: ${e.message}`);
                 }
-                
-                console.log('WPSMD: Final parsed state data:', stateData);
 
                 // Validate required state properties
-                if (!stateData.nonce || !stateData.action || !stateData.timestamp) {
+                const requiredFields = ['nonce', 'action', 'timestamp', 'site_url'];
+                const missingFields = requiredFields.filter(field => !stateData[field]);
+                
+                if (missingFields.length > 0) {
                     console.error('WPSMD: Missing required state parameters:', {
-                        hasNonce: !!stateData.nonce,
-                        hasAction: !!stateData.action,
-                        hasTimestamp: !!stateData.timestamp
+                        missingFields: missingFields,
+                        stateData: stateData
                     });
-                    throw new Error('Missing required state parameters');
+                    throw new Error(`Missing required state parameters: ${missingFields.join(', ')}`);
+                }
+
+                // Validate timestamp format and value
+                const timestamp = parseInt(stateData.timestamp, 10);
+                if (isNaN(timestamp)) {
+                    console.error('WPSMD: Invalid timestamp format:', stateData.timestamp);
+                    throw new Error('Invalid timestamp format in state');
                 }
 
                 // Check if state has expired (30 minutes)
-                const stateTime = new Date(stateData.timestamp).getTime();
-                const currentTime = new Date().getTime();
+                const stateTime = timestamp * 1000; // Convert to milliseconds
+                const currentTime = Date.now();
                 const timeLimit = 30 * 60 * 1000; // 30 minutes in milliseconds
 
                 if (currentTime - stateTime > timeLimit) {
                     console.error('WPSMD: State parameter expired:', {
                         stateTime: new Date(stateTime).toISOString(),
                         currentTime: new Date(currentTime).toISOString(),
-                        timeDiff: Math.floor((currentTime - stateTime) / 1000) + ' seconds'
+                        timeDiff: Math.floor((currentTime - stateTime) / 1000) + ' seconds',
+                        timeLimit: timeLimit / 1000 + ' seconds'
                     });
                     throw new Error('State parameter has expired');
                 }
@@ -196,31 +213,72 @@
 
         // Clean and validate state parameter
         function cleanStateParameter(state) {
-            if (!state) return '';
+            if (!state) {
+                console.error('WPSMD: Empty state parameter');
+                return '';
+            }
             
             // Log raw state for debugging
-            console.log('WPSMD: Raw state parameter:', state);
+            console.log('WPSMD: Raw state parameter:', {
+                state: state,
+                length: state.length,
+                containsBase64Chars: /^[A-Za-z0-9+/=_-]*$/.test(state)
+            });
             
             try {
                 // Convert URL-safe base64 to standard base64
                 let standardBase64 = state.replace(/-/g, '+').replace(/_/g, '/');
+                
+                // Add padding if needed
                 const padding = standardBase64.length % 4;
                 if (padding) {
                     standardBase64 += '='.repeat(4 - padding);
                 }
-                console.log('WPSMD: Converted to standard base64:', standardBase64);
-
-                // Validate by attempting to decode and parse
-                const decoded = atob(standardBase64);
-                const stateData = JSON.parse(decoded);
-                console.log('WPSMD: Successfully validated state data:', stateData);
                 
-                // Return the original state since it's valid
-                return state;
+                console.log('WPSMD: Converted to standard base64:', {
+                    base64: standardBase64,
+                    length: standardBase64.length,
+                    padding: padding
+                });
+
+                // Attempt base64 decode
+                let decoded;
+                try {
+                    decoded = atob(standardBase64);
+                    console.log('WPSMD: Base64 decode successful, length:', decoded.length);
+                } catch (decodeError) {
+                    console.error('WPSMD: Base64 decode failed:', decodeError);
+                    throw new Error('Invalid base64 encoding');
+                }
+
+                // Attempt JSON parse
+                try {
+                    const stateData = JSON.parse(decoded);
+                    console.log('WPSMD: JSON parse successful:', stateData);
+                    
+                    // Verify required fields
+                    const requiredFields = ['nonce', 'action', 'timestamp', 'site_url'];
+                    for (const field of requiredFields) {
+                        if (!stateData[field]) {
+                            throw new Error(`Missing required field: ${field}`);
+                        }
+                    }
+                    
+                    return state; // Return original state if all validation passes
+                } catch (jsonError) {
+                    console.error('WPSMD: JSON parse failed:', {
+                        error: jsonError,
+                        decodedString: decoded
+                    });
+                    throw new Error('Invalid JSON structure');
+                }
             } catch (e) {
-                console.error('WPSMD: State parameter validation failed:', e);
-                // Return original state since we can't safely clean it
-                return state;
+                console.error('WPSMD: State parameter validation failed:', {
+                    error: e.message,
+                    originalState: state,
+                    stack: e.stack
+                });
+                throw e; // Propagate the error instead of returning invalid state
             }
         }
 
@@ -228,12 +286,45 @@
         let cleanedState;
         try {
             cleanedState = cleanStateParameter(state);
-            // Validate the cleaned state can be properly decoded
-            const testDecode = JSON.parse(atob(cleanedState));
-            console.log('WPSMD: Validated cleaned state:', testDecode);
+            if (!cleanedState) {
+                throw new Error('State parameter validation failed');
+            }
+            console.log('WPSMD: Successfully validated state parameter');
         } catch (e) {
-            console.error('WPSMD: Failed to validate cleaned state, using original:', e);
-            cleanedState = state; // Fall back to original state if cleaning fails
+            console.error('WPSMD: State validation failed:', {
+                error: e.message,
+                originalState: state
+            });
+            showNotice(wpsmdAnalytics.i18n.verifyError + ': Invalid state parameter - Please try again', 'error');
+            $button.prop('disabled', false).text(originalText);
+            return;
+        }
+
+        // Ensure state parameter is properly validated before sending
+        if (!cleanedState) {
+            console.error('WPSMD: Cannot proceed with null or empty state');
+            showNotice(wpsmdAnalytics.i18n.verifyError + ': Invalid state parameter', 'error');
+            $button.prop('disabled', false).text(originalText);
+            return;
+        }
+
+        // Verify state parameter format
+        try {
+            // Convert URL-safe base64 to standard base64
+            const standardBase64 = cleanedState.replace(/-/g, '+').replace(/_/g, '/').replace(/=+$/, '');
+            const padding = 4 - (standardBase64.length % 4);
+            const paddedBase64 = standardBase64 + (padding === 4 ? '' : '='.repeat(padding));
+            
+            // Final validation of state parameter
+            const decodedState = JSON.parse(atob(paddedBase64));
+            if (!decodedState.nonce || !decodedState.action || !decodedState.timestamp || !decodedState.site_url) {
+                throw new Error('Invalid state parameter structure');
+            }
+        } catch (e) {
+            console.error('WPSMD: Final state validation failed:', e);
+            showNotice(wpsmdAnalytics.i18n.verifyError + ': State parameter validation failed', 'error');
+            $button.prop('disabled', false).text(originalText);
+            return;
         }
 
         const requestData = {
@@ -244,19 +335,27 @@
             debug_info: {
                 original_state: state,
                 cleaned_state: cleanedState,
-                url: window.location.href
+                url: window.location.href,
+                timestamp: Math.floor(Date.now() / 1000)
             }
         };
-        console.log('WPSMD: Sending request with data:', requestData);
+
+        console.log('WPSMD: Sending request with data:', {
+            action: requestData.action,
+            has_code: !!requestData.code,
+            has_state: !!requestData.state,
+            debug_info: requestData.debug_info
+        });
 
         // Log complete request configuration
         console.log('WPSMD: Complete request configuration:', {
             url: wpsmdAnalytics.ajax_url,
-            type: 'POST',
-            data: requestData,
+            method: 'POST',
             headers: {
-                'X-Requested-With': 'XMLHttpRequest'
-            }
+                'X-Requested-With': 'XMLHttpRequest',
+                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+            },
+            data_length: JSON.stringify(requestData).length
         });
 
         $.ajax({
@@ -274,14 +373,81 @@
                     responseText: jqXHR.responseText,
                     textStatus: textStatus,
                     errorThrown: errorThrown,
-                    requestData: requestData,
-                    url: wpsmdAnalytics.ajax_url
+                    requestData: {
+                        action: requestData.action,
+                        has_code: !!requestData.code,
+                        has_state: !!requestData.state,
+                        debug_info: requestData.debug_info
+                    }
                 };
 
                 console.error('WPSMD: Verification error details:', errorDetails);
 
                 let errorMessage = wpsmdAnalytics.i18n.verifyError;
                 let details = '';
+
+                try {
+                    // Try to parse the response as JSON
+                    const jsonResponse = JSON.parse(jqXHR.responseText);
+                    if (jsonResponse.data && jsonResponse.data.message) {
+                        details = jsonResponse.data.message;
+                    }
+                } catch (e) {
+                    // If response is not JSON, check for specific error types
+                    if (jqXHR.status === 400) {
+                        if (jqXHR.responseText.includes('state parameter')) {
+                            details = 'Invalid state parameter. Please clear your browser cache and try the verification process again.';
+                        } else if (jqXHR.responseText.includes('redirect_uri_mismatch')) {
+                            details = 'Redirect URI mismatch. Please check the OAuth configuration in Google Cloud Console.';
+                        } else {
+                            details = jqXHR.responseText || 'Bad Request - Please try again';
+                        }
+                        console.log('WPSMD: Bad Request details:', {
+                            responseText: jqXHR.responseText,
+                            state: requestData.state,
+                            code: !!requestData.code
+                        });
+                    } else if (jqXHR.status === 401) {
+                        details = 'Authentication failed. Please try the verification process again.';
+                    } else if (jqXHR.status === 0 && textStatus === 'error') {
+                        details = 'Network error. Please check your internet connection and try again.';
+                    } else {
+                        details = `Error (${jqXHR.status}): ${jqXHR.statusText || 'Unknown error'}`;
+                    }
+                }
+
+                // Construct a helpful error message with troubleshooting steps
+                let finalErrorMessage = details ? `${errorMessage}: ${details}` : errorMessage;
+                let troubleshootingSteps = '';
+
+                if (jqXHR.status === 400) {
+                    troubleshootingSteps = '\n\nTroubleshooting steps:\n' +
+                        '1. Clear your browser cache and cookies\n' +
+                        '2. Close all browser windows and reopen\n' +
+                        '3. Try the verification process again\n' +
+                        '4. If the error persists, check the Google Cloud Console OAuth configuration';
+                } else if (jqXHR.status === 401) {
+                    troubleshootingSteps = '\n\nTroubleshooting steps:\n' +
+                        '1. Ensure you are logged into the correct Google account\n' +
+                        '2. Try the verification process again\n' +
+                        '3. If the error persists, check if you have the necessary permissions';
+                } else if (jqXHR.status === 0) {
+                    troubleshootingSteps = '\n\nTroubleshooting steps:\n' +
+                        '1. Check your internet connection\n' +
+                        '2. Ensure the site is accessible\n' +
+                        '3. Try disabling any VPN or proxy services';
+                }
+
+                finalErrorMessage += troubleshootingSteps;
+                console.log('WPSMD: Displaying error message with troubleshooting steps:', {
+                    message: finalErrorMessage,
+                    status: jqXHR.status,
+                    responseText: jqXHR.responseText
+                });
+
+                // Show error message to user
+                showNotice(finalErrorMessage, 'error');
+                $button.prop('disabled', false).text(originalText);
 
                 // Try to parse response JSON if available
                 try {
