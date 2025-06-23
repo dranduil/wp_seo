@@ -135,6 +135,16 @@
                         window.location.href = response.data.redirect_url;
                         return;
                     }
+                    
+                    if (authCode) {
+                        console.log('WPSMD: Reloading page to refresh state');
+                        // Remove code from URL and reload to refresh the page state
+                        const newUrl = window.location.href.split('?')[0];
+                        window.location.href = newUrl;
+                    } else {
+                        console.log('WPSMD: No redirect/reload needed');
+                        location.reload();
+                    }
                 } else {
                     // Handle error response
                     console.error('WPSMD: Error response:', response);
@@ -142,32 +152,22 @@
                         ? response.data.message
                         : wpsmdAnalytics.i18n.verifyError;
                     showNotice(errorMessage, 'error');
-                    $button.prop('disabled', false).text(originalText);
-                    return;
-                }
-                
-                if (authCode) {
-                    console.log('WPSMD: Reloading page to refresh state');
-                        // Remove code from URL and reload to refresh the page state
+                    if (authCode) {
+                        // Remove failed auth code from URL
                         const newUrl = window.location.href.split('?')[0];
-                        window.location.href = newUrl;
-                    } else {
-                        console.log('WPSMD: No redirect/reload needed');
-                        showNotice(response.data.message || wpsmdAnalytics.i18n.verifyError, 'error');
-                        if (authCode) {
-                            // Remove failed auth code from URL
-                            const newUrl = window.location.href.split('?')[0];
-                            window.history.replaceState({}, document.title, newUrl);
-                        } else {
-                            location.reload();
-                        }
+                        window.history.replaceState({}, document.title, newUrl);
                     }
+                    $button.prop('disabled', false).text(originalText);
                 }
             },
             error: function(jqXHR, textStatus, errorThrown) {
                 console.error('WPSMD: AJAX error:', textStatus, errorThrown);
                 console.error('WPSMD: Response:', jqXHR.responseText);
-                showNotice(wpsmdAnalytics.i18n.verifyError + ': ' + textStatus, 'error');
+                var errorMessage = wpsmdAnalytics.i18n.verifyError;
+                if (textStatus) {
+                    errorMessage += ': ' + textStatus;
+                }
+                showNotice(errorMessage, 'error');
             },
             complete: function() {
                 $button.prop('disabled', false).text(originalText);
