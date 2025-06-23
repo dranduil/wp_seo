@@ -224,7 +224,27 @@ class WPSMD_Analytics {
                     // Verify the token works by making a test API call
                     $searchConsole = new Google_Service_SearchConsole($client);
                     $siteUrl = get_site_url();
-                    $searchConsole->sites->get($siteUrl);
+                    
+                    try {
+                        // First check if the site is already verified
+                        $site = $searchConsole->sites->get($siteUrl);
+                        error_log('WPSMD: Site verification status: ' . print_r($site->permissionLevel, true));
+                        
+                        if ($site->permissionLevel === 'siteUnverifiedUser') {
+                            error_log('WPSMD: Site is not verified');
+                            delete_option('wpsmd_gsc_token');
+                            wp_send_json_error(array('message' => __('Please verify your site in Google Search Console first.', 'wp-seo-meta-descriptions')));
+                            return;
+                        }
+                    } catch (Google_Service_Exception $e) {
+                        error_log('WPSMD: Site verification check failed: ' . $e->getMessage());
+                        if ($e->getCode() === 404) {
+                            delete_option('wpsmd_gsc_token');
+                            wp_send_json_error(array('message' => __('Your site is not found in Google Search Console. Please add and verify it first.', 'wp-seo-meta-descriptions')));
+                            return;
+                        }
+                        throw $e;
+                    }
                     
                     error_log('WPSMD: Test API call successful');
                     wp_send_json_success(array(

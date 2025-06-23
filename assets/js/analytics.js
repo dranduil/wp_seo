@@ -81,12 +81,15 @@
                 if (response.success) {
                     showNotice(response.data.message, 'success');
                     if (response.data.auth_url) {
+                        console.log('WPSMD: Redirecting to auth URL');
                         window.location.href = response.data.auth_url;
-                    } else if (authCode) {
+                    } else if (response.data.reload || authCode) {
+                        console.log('WPSMD: Reloading page to refresh state');
                         // Remove code from URL and reload to refresh the page state
                         const newUrl = window.location.href.split('?')[0];
                         window.location.href = newUrl;
                     } else {
+                        console.log('WPSMD: No redirect/reload needed');
                         location.reload();
                     }
                 } else {
@@ -111,7 +114,23 @@
 
     // Check GSC connection status
     function checkGSCConnection() {
-        // TODO: Implement connection status check
+        $.ajax({
+            url: wpsmdAnalytics.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'wpsmd_verify_gsc',
+                nonce: wpsmdAnalytics.nonce
+            },
+            success: function(response) {
+                console.log('WPSMD: Connection check response:', response);
+                if (!response.success && response.data && response.data.message) {
+                    showNotice(response.data.message, 'error');
+                }
+            },
+            error: function(jqXHR, textStatus, errorThrown) {
+                console.error('WPSMD: Connection check error:', textStatus, errorThrown);
+            }
+        });
     }
 
     // Load analytics data
