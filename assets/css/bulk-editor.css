@@ -1,0 +1,200 @@
+.wpsmd-bulk-seo {
+    margin: 20px 0;
+}
+
+/* Tab Navigation */
+.nav-tab-wrapper {
+    margin-bottom: 20px;
+    border-bottom: 1px solid #ccc;
+}
+
+.nav-tab {
+    margin-left: 0.5em;
+    margin-right: 0.5em;
+}
+
+/* Tab Content */
+.tab-content {
+    display: none;
+    padding: 20px 0;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+/* Bulk Editor Controls */
+.bulk-editor-controls {
+    margin-bottom: 20px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+/* Bulk Editor Table */
+.bulk-editor-table-wrapper {
+    margin: 20px 0;
+    overflow-x: auto;
+}
+
+.bulk-editor-table-wrapper table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.bulk-editor-table-wrapper th {
+    text-align: left;
+    padding: 10px;
+}
+
+.bulk-editor-table-wrapper td {
+    padding: 10px;
+    vertical-align: top;
+}
+
+.column-title {
+    width: 20%;
+}
+
+.column-seo-title {
+    width: 25%;
+}
+
+.column-meta-description {
+    width: 35%;
+}
+
+.column-canonical {
+    width: 20%;
+}
+
+.row-actions {
+    color: #666;
+    font-size: 12px;
+    padding-top: 4px;
+}
+
+.row-actions a {
+    text-decoration: none;
+}
+
+/* Form Controls */
+.widefat {
+    width: 100%;
+    max-width: 100%;
+}
+
+textarea.widefat {
+    min-height: 60px;
+    resize: vertical;
+}
+
+/* CPT Templates */
+.cpt-template-section {
+    margin-bottom: 30px;
+    padding: 20px;
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+.cpt-template-section h3 {
+    margin-top: 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #eee;
+}
+
+.form-table th {
+    width: 200px;
+    padding: 20px 10px 20px 0;
+}
+
+.form-table td {
+    padding: 15px 10px;
+}
+
+.description {
+    font-style: italic;
+    color: #666;
+    margin-top: 5px;
+}
+
+/* Import/Export Section */
+.export-section,
+.import-section {
+    margin-bottom: 30px;
+    padding: 20px;
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+.export-section h3,
+.import-section h3 {
+    margin-top: 0;
+}
+
+#import-file {
+    margin: 10px 0;
+    display: block;
+}
+
+/* Action Buttons */
+.bulk-editor-actions {
+    margin-top: 20px;
+    padding: 15px 0;
+    border-top: 1px solid #eee;
+}
+
+/* Responsive Design */
+@media screen and (max-width: 782px) {
+    .form-table th {
+        width: 100%;
+        display: block;
+        padding-bottom: 0;
+    }
+
+    .form-table td {
+        width: 100%;
+        display: block;
+        padding-left: 0;
+        padding-right: 0;
+    }
+
+    .bulk-editor-table-wrapper {
+        overflow-x: auto;
+    }
+
+    .bulk-editor-table-wrapper table {
+        min-width: 600px;
+    }
+
+    .nav-tab {
+        margin: 0 0 5px 0;
+    }
+}
+
+/* Loading States */
+.loading {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+/* Success/Error Messages */
+.notice {
+    margin: 15px 0;
+    padding: 10px 15px;
+    border-radius: 4px;
+}
+
+.notice-success {
+    background-color: #dff0d8;
+    border: 1px solid #d6e9c6;
+    color: #3c763d;
+}
+
+.notice-error {
+    background-color: #f2dede;
+    border: 1px solid #ebccd1;
+    color: #a94442;
+}

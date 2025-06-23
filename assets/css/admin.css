@@ -1,0 +1,104 @@
+.wrap {
+    max-width: 1200px;
+    margin: 20px auto;
+}
+
+/* Tab Navigation */
+.nav-tab-wrapper {
+    margin-bottom: 20px;
+    border-bottom: 1px solid #ccc;
+}
+
+.nav-tab {
+    margin-left: 0.5em;
+    margin-right: 0.5em;
+}
+
+/* Tab Content */
+.tab-content {
+    background: #fff;
+    padding: 20px;
+    border: 1px solid #ccc;
+    border-top: none;
+}
+
+/* Bulk Editor */
+#post-type-filter {
+    margin-bottom: 20px;
+    min-width: 200px;
+}
+
+.seo-item {
+    background: #f9f9f9;
+    border: 1px solid #e5e5e5;
+    margin-bottom: 20px;
+    padding: 15px;
+}
+
+.seo-item h3 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #eee;
+}
+
+.seo-item label {
+    font-weight: 600;
+}
+
+.seo-item input[type="text"],
+.seo-item textarea {
+    width: 100%;
+    margin-top: 5px;
+}
+
+/* CPT Templates */
+#cpt-templates .large-text {
+    width: 100%;
+    margin-top: 5px;
+}
+
+#cpt-templates .description {
+    display: block;
+    margin-top: 5px;
+    color: #666;
+    font-style: italic;
+}
+
+/* Import/Export */
+#import-export h3 {
+    margin-top: 30px;
+}
+
+#import-export h3:first-child {
+    margin-top: 0;
+}
+
+/* Common Form Elements */
+.button-primary {
+    margin-top: 20px;
+}
+
+/* Responsive Design */
+@media screen and (max-width: 782px) {
+    .nav-tab {
+        margin: 0 0 10px 0;
+        display: block;
+        border: 1px solid #ccc;
+        border-bottom: none;
+    }
+    
+    .nav-tab:last-child {
+        border-bottom: 1px solid #ccc;
+    }
+    
+    .nav-tab-active {
+        background: #fff;
+        border-bottom: 1px solid #ccc;
+    }
+    
+    .tab-content {
+        border: none;
+        padding: 10px 0;
+    }
+}

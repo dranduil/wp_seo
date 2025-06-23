@@ -19,20 +19,30 @@ class WPSMD_Admin {
         add_action( 'save_post', array( $this, 'save_seo_data' ) );
         add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_scripts' ) );
         add_action( 'wp_ajax_wpsmd_generate_seo_content', array( $this, 'ajax_generate_seo_content' ) );
+        add_action( 'admin_menu', array( $this, 'add_bulk_seo_menu' ) );
+        add_action( 'wp_ajax_wpsmd_get_posts', array( $this, 'get_posts_for_bulk_editor' ) );
+        add_action( 'wp_ajax_wpsmd_save_bulk_meta', array( $this, 'save_bulk_meta' ) );
+        add_action( 'wp_ajax_wpsmd_save_cpt_templates', array( $this, 'save_cpt_templates' ) );
+        add_action( 'wp_ajax_wpsmd_export_settings', array( $this, 'export_settings' ) );
+        add_action( 'wp_ajax_wpsmd_import_settings', array( $this, 'import_settings' ) );
     }
 
     /**
      * Enqueue admin scripts and styles.
      */
     public function enqueue_admin_scripts( $hook ) {
-        // Only enqueue on post edit screens
-        if ( 'post.php' !== $hook && 'post-new.php' !== $hook ) {
+        // Enqueue on post edit screens and our custom bulk SEO page
+        if ( 'post.php' !== $hook && 'post-new.php' !== $hook && 'seo_page_wpsmd-bulk-seo' !== $hook ) {
             return;
         }
-        // In a real plugin, you would enqueue a separate JS file.
-        // For simplicity here, we'll add inline JS in the meta_box_callback.
-        // wp_enqueue_script( 'wpsmd-admin-js', plugin_dir_url( __FILE__ ) . '../../assets/js/admin.js', array( 'jquery' ), WPSMD_VERSION, true );
-        // wp_localize_script( 'wpsmd-admin-js', 'wpsmd_ajax', array( 'ajax_url' => admin_url( 'admin-ajax.php' ), 'nonce' => wp_create_nonce('wpsmd_ajax_nonce') ) );
+
+        wp_enqueue_script( 'wpsmd-admin-js', plugin_dir_url( __FILE__ ) . '../../assets/js/admin.js', array( 'jquery' ), WPSMD_VERSION, true );
+        wp_localize_script( 'wpsmd-admin-js', 'wpsmd_ajax', array(
+            'ajax_url' => admin_url( 'admin-ajax.php' ),
+            'nonce' => wp_create_nonce('wpsmd_ajax_nonce')
+        ));
+
+        wp_enqueue_style( 'wpsmd-admin-css', plugin_dir_url( __FILE__ ) . '../../assets/css/admin.css', array(), WPSMD_VERSION );
     }
 
     /**
@@ -136,6 +146,208 @@ class WPSMD_Admin {
     }
 
     /**
+     * Add bulk SEO management menu item
+     */
+    public function add_bulk_seo_menu() {
+        add_submenu_page(
+            'tools.php',
+            __('Bulk SEO Manager', 'wp-seo-meta-descriptions'),
+            __('Bulk SEO Manager', 'wp-seo-meta-descriptions'),
+            'manage_options',
+            'wpsmd-bulk-seo',
+            array($this, 'render_bulk_seo_page')
+        );
+    }
+
+    /**
+     * Render the bulk SEO management page
+     */
+    public function render_bulk_seo_page() {
+        // Get all public post types
+        $post_types = get_post_types(array('public' => true), 'objects');
+        
+        echo '<div class="wrap">';
+        echo '<h1>' . __('Bulk SEO Manager', 'wp-seo-meta-descriptions') . '</h1>';
+        
+        // Tabs
+        echo '<h2 class="nav-tab-wrapper">';
+        echo '<a href="#bulk-editor" class="nav-tab nav-tab-active">' . __('Bulk Editor', 'wp-seo-meta-descriptions') . '</a>';
+        echo '<a href="#cpt-templates" class="nav-tab">' . __('CPT Templates', 'wp-seo-meta-descriptions') . '</a>';
+        echo '<a href="#import-export" class="nav-tab">' . __('Import/Export', 'wp-seo-meta-descriptions') . '</a>';
+        echo '</h2>';
+
+        // Bulk Editor Tab
+        echo '<div id="bulk-editor" class="tab-content">';
+        echo '<form id="bulk-seo-form">';
+        echo '<select id="post-type-filter">';
+        foreach ($post_types as $post_type) {
+            echo '<option value="' . esc_attr($post_type->name) . '">' . esc_html($post_type->labels->name) . '</option>';
+        }
+        echo '</select>';
+        echo '<div id="bulk-seo-items"></div>';
+        echo '<button type="submit" class="button button-primary">' . __('Save All Changes', 'wp-seo-meta-descriptions') . '</button>';
+        echo '</form>';
+        echo '</div>';
+
+        // CPT Templates Tab
+        echo '<div id="cpt-templates" class="tab-content" style="display:none;">';
+        echo '<form id="cpt-templates-form">';
+        foreach ($post_types as $post_type) {
+            echo '<h3>' . esc_html($post_type->labels->name) . '</h3>';
+            echo '<p>';
+            echo '<label>' . __('Title Template:', 'wp-seo-meta-descriptions') . '</label><br>';
+            echo '<input type="text" name="title_template[' . esc_attr($post_type->name) . ']" class="large-text" />';
+            echo '<span class="description">' . __('Available variables: %title%, %sitename%, %category%, %tag%', 'wp-seo-meta-descriptions') . '</span>';
+            echo '</p>';
+            echo '<p>';
+            echo '<label>' . __('Description Template:', 'wp-seo-meta-descriptions') . '</label><br>';
+            echo '<textarea name="desc_template[' . esc_attr($post_type->name) . ']" class="large-text" rows="3"></textarea>';
+            echo '<span class="description">' . __('Available variables: %excerpt%, %title%, %category%, %tag%', 'wp-seo-meta-descriptions') . '</span>';
+            echo '</p>';
+        }
+        echo '<button type="submit" class="button button-primary">' . __('Save Templates', 'wp-seo-meta-descriptions') . '</button>';
+        echo '</form>';
+        echo '</div>';
+
+        // Import/Export Tab
+        echo '<div id="import-export" class="tab-content" style="display:none;">';
+        echo '<h3>' . __('Export Settings', 'wp-seo-meta-descriptions') . '</h3>';
+        echo '<p><button type="button" id="export-settings" class="button">' . __('Export All Settings', 'wp-seo-meta-descriptions') . '</button></p>';
+        echo '<h3>' . __('Import Settings', 'wp-seo-meta-descriptions') . '</h3>';
+        echo '<form id="import-settings-form">';
+        echo '<p><input type="file" id="import-file" accept=".json" /></p>';
+        echo '<p><button type="submit" class="button">' . __('Import Settings', 'wp-seo-meta-descriptions') . '</button></p>';
+        echo '</form>';
+        echo '</div>';
+
+        echo '</div>'; // .wrap
+    }
+
+    /**
+     * AJAX handler for getting posts for bulk editor
+     */
+    public function get_posts_for_bulk_editor() {
+        check_ajax_referer('wpsmd_ajax_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Permission denied');
+        }
+
+        $post_type = isset($_GET['post_type']) ? sanitize_text_field($_GET['post_type']) : 'post';
+        
+        $args = array(
+            'post_type' => $post_type,
+            'posts_per_page' => 50,
+            'post_status' => 'publish',
+            'orderby' => 'date',
+            'order' => 'DESC'
+        );
+
+        $posts = get_posts($args);
+        $formatted_posts = array();
+
+        foreach ($posts as $post) {
+            $formatted_posts[] = array(
+                'ID' => $post->ID,
+                'title' => $post->post_title,
+                'seo_title' => get_post_meta($post->ID, '_wpsmd_seo_title', true),
+                'meta_description' => get_post_meta($post->ID, '_wpsmd_meta_description', true)
+            );
+        }
+
+        wp_send_json_success($formatted_posts);
+    }
+
+    /**
+     * AJAX handler for saving bulk meta data
+     */
+    public function save_bulk_meta() {
+        check_ajax_referer('wpsmd_ajax_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Permission denied');
+        }
+
+        $items = isset($_POST['items']) ? $_POST['items'] : array();
+        $updated = 0;
+
+        foreach ($items as $item) {
+            $post_id = absint($item['post_id']);
+            if ($post_id && current_user_can('edit_post', $post_id)) {
+                update_post_meta($post_id, '_wpsmd_seo_title', sanitize_text_field($item['title']));
+                update_post_meta($post_id, '_wpsmd_meta_description', sanitize_textarea_field($item['description']));
+                $updated++;
+            }
+        }
+
+        wp_send_json_success(array('updated' => $updated));
+    }
+
+    /**
+     * AJAX handler for saving CPT templates
+     */
+    public function save_cpt_templates() {
+        check_ajax_referer('wpsmd_ajax_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Permission denied');
+        }
+
+        $templates = array(
+            'title' => isset($_POST['title_templates']) ? $_POST['title_templates'] : array(),
+            'description' => isset($_POST['desc_templates']) ? $_POST['desc_templates'] : array()
+        );
+
+        update_option('wpsmd_cpt_templates', $templates);
+        wp_send_json_success();
+    }
+
+    /**
+     * AJAX handler for exporting settings
+     */
+    public function export_settings() {
+        check_ajax_referer('wpsmd_ajax_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Permission denied');
+        }
+
+        $settings = array(
+            'options' => get_option('wpsmd_options'),
+            'cpt_templates' => get_option('wpsmd_cpt_templates')
+        );
+
+        wp_send_json_success($settings);
+    }
+
+    /**
+     * AJAX handler for importing settings
+     */
+    public function import_settings() {
+        check_ajax_referer('wpsmd_ajax_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Permission denied');
+        }
+
+        $file = $_FILES['import_file'];
+        if (!$file || $file['error']) {
+            wp_send_json_error('Invalid file');
+        }
+
+        $content = file_get_contents($file['tmp_name']);
+        $settings = json_decode($content, true);
+
+        if (!$settings || !is_array($settings)) {
+            wp_send_json_error('Invalid settings format');
+        }
+
+        if (isset($settings['options'])) {
+            update_option('wpsmd_options', $settings['options']);
+        }
+        if (isset($settings['cpt_templates'])) {
+            update_option('wpsmd_cpt_templates', $settings['cpt_templates']);
+        }
+
+        wp_send_json_success();
+    }
+
+    /**
      * Callback function to display the meta box content.
      *
      * @param WP_Post $post The post object.
@@ -145,6 +357,7 @@ class WPSMD_Admin {
 
         $seo_title = get_post_meta( $post->ID, '_wpsmd_seo_title', true );
         $meta_description = get_post_meta( $post->ID, '_wpsmd_meta_description', true );
+        $canonical_url = get_post_meta( $post->ID, '_wpsmd_canonical_url', true );
         $openai_api_key = get_post_meta( $post->ID, '_wpsmd_openai_api_key', true );
         $schema_type = get_post_meta( $post->ID, '_wpsmd_schema_type', true );
         if ( empty( $schema_type ) ) {
@@ -156,6 +369,13 @@ class WPSMD_Admin {
         echo '<label for="wpsmd_seo_title_field"><strong>' . __( 'SEO Title:', 'wp-seo-meta-descriptions' ) . '</strong></label><br />';
         echo '<input type="text" id="wpsmd_seo_title_field" name="wpsmd_seo_title_field" value="' . esc_attr( $seo_title ) . '" style="width:100%;" />';
         echo '<button type="button" id="wpsmd_generate_title_btn" class="button wpsmd-ai-generate-btn" data-type="title" data-target="wpsmd_seo_title_field">' . __( 'Generate with AI', 'wp-seo-meta-descriptions' ) . '</button>';
+        echo '</p>';
+
+        // Canonical URL Field
+        echo '<p>';
+        echo '<label for="wpsmd_canonical_url_field"><strong>' . __( 'Canonical URL:', 'wp-seo-meta-descriptions' ) . '</strong></label><br />';
+        echo '<input type="url" id="wpsmd_canonical_url_field" name="wpsmd_canonical_url_field" value="' . esc_url( $canonical_url ) . '" style="width:100%;" placeholder="' . __( 'Enter the canonical URL if this page is a duplicate of another page', 'wp-seo-meta-descriptions' ) . '" />';
+        echo '<span class="description">' . __( 'Use this to specify the preferred version of this page to help avoid duplicate content issues', 'wp-seo-meta-descriptions' ) . '</span>';
         echo '</p>';
 
         // Meta Description Field
@@ -483,6 +703,13 @@ class WPSMD_Admin {
             update_post_meta( $post_id, '_wpsmd_seo_title', sanitize_text_field( $_POST['wpsmd_seo_title_field'] ) );
         } else {
             delete_post_meta( $post_id, '_wpsmd_seo_title' );
+        }
+
+        // Save Canonical URL
+        if ( isset( $_POST['wpsmd_canonical_url_field'] ) && !empty( $_POST['wpsmd_canonical_url_field'] ) ) {
+            update_post_meta( $post_id, '_wpsmd_canonical_url', esc_url_raw( $_POST['wpsmd_canonical_url_field'] ) );
+        } else {
+            delete_post_meta( $post_id, '_wpsmd_canonical_url' );
         }
 
         // Save Meta Description

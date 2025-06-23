@@ -17,6 +17,27 @@ class WPSMD_Frontend {
     public function __construct() {
         add_action( 'wp_head', array( $this, 'output_json_ld' ) );
         add_action( 'wp_head', array( $this, 'output_social_meta_tags' ) );
+        add_action( 'wp_head', array( $this, 'output_canonical_url' ) );
+    }
+
+    /**
+     * Outputs the canonical URL tag in the HTML head.
+     */
+    public function output_canonical_url() {
+        if ( is_singular() ) {
+            $post_id = get_queried_object_id();
+            if ( ! $post_id ) {
+                return;
+            }
+
+            $canonical_url = get_post_meta( $post_id, '_wpsmd_canonical_url', true );
+            if ( ! empty( $canonical_url ) ) {
+                echo '<link rel="canonical" href="' . esc_url( $canonical_url ) . '" />' . "\n";
+            } else {
+                // If no custom canonical URL is set, use the current permalink
+                echo '<link rel="canonical" href="' . esc_url( get_permalink( $post_id ) ) . '" />' . "\n";
+            }
+        }
     }
 
     /**
