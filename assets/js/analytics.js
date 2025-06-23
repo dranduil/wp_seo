@@ -133,14 +133,42 @@
                 decodedState: decodeURIComponent(state)
             });
 
+            // Log the complete URL and query parameters
+            console.log('WPSMD: Complete callback URL:', window.location.href);
+            console.log('WPSMD: All URL parameters:', Object.fromEntries(urlParams.entries()));
+            
             // Validate state parameter format
             try {
-                const decodedState = decodeURIComponent(state);
-                const stateData = JSON.parse(atob(decodedState));
-                console.log('WPSMD: Parsed state data:', stateData);
+                // First try to decode the state parameter directly
+                let stateData;
+                let decodedState = state;
+                
+                try {
+                    // Try direct base64 decode first
+                    const directDecoded = atob(state);
+                    try {
+                        stateData = JSON.parse(directDecoded);
+                        console.log('WPSMD: Successfully decoded state directly:', stateData);
+                    } catch (e) {
+                        console.log('WPSMD: Direct JSON parse failed, trying URL decode:', e);
+                        decodedState = cleanStateParameter(state);
+                        stateData = JSON.parse(atob(decodedState));
+                    }
+                } catch (e) {
+                    console.log('WPSMD: Direct base64 decode failed, trying URL decode first:', e);
+                    decodedState = cleanStateParameter(state);
+                    stateData = JSON.parse(atob(decodedState));
+                }
+                
+                console.log('WPSMD: Final parsed state data:', stateData);
 
                 // Validate required state properties
                 if (!stateData.nonce || !stateData.action || !stateData.timestamp) {
+                    console.error('WPSMD: Missing required state parameters:', {
+                        hasNonce: !!stateData.nonce,
+                        hasAction: !!stateData.action,
+                        hasTimestamp: !!stateData.timestamp
+                    });
                     throw new Error('Missing required state parameters');
                 }
 
@@ -150,6 +178,11 @@
                 const timeLimit = 30 * 60 * 1000; // 30 minutes in milliseconds
 
                 if (currentTime - stateTime > timeLimit) {
+                    console.error('WPSMD: State parameter expired:', {
+                        stateTime: new Date(stateTime).toISOString(),
+                        currentTime: new Date(currentTime).toISOString(),
+                        timeDiff: Math.floor((currentTime - stateTime) / 1000) + ' seconds'
+                    });
                     throw new Error('State parameter has expired');
                 }
             } catch (e) {
@@ -163,28 +196,78 @@
         // Clean and validate state parameter
         function cleanStateParameter(state) {
             if (!state) return '';
-            // Remove any double encoding
+            
+            // Log raw state for debugging
+            console.log('WPSMD: Raw state parameter:', state);
+            
+            // First try direct base64 decode
+            try {
+                const directDecoded = atob(state);
+                try {
+                    JSON.parse(directDecoded);
+                    console.log('WPSMD: Successfully decoded state directly:', directDecoded);
+                    return state; // Return original if it's already valid base64
+                } catch (e) {
+                    console.log('WPSMD: Direct decode succeeded but invalid JSON:', e);
+                }
+            } catch (e) {
+                console.log('WPSMD: Direct base64 decode failed, trying URL decode:', e);
+            }
+            
+            // Try URL decoding
             let cleanedState = state;
             try {
                 // Try to decode until we can't anymore (handles multiple encodings)
-                while (true) {
+                let iterations = 0;
+                const maxIterations = 3; // Prevent infinite loops
+                
+                while (iterations < maxIterations) {
                     const decoded = decodeURIComponent(cleanedState);
+                    console.log(`WPSMD: Decode iteration ${iterations + 1}:`, decoded);
+                    
                     if (decoded === cleanedState) break;
                     cleanedState = decoded;
+                    iterations++;
                 }
+                
+                // Try to validate the final decoded state
+                try {
+                    const stateData = JSON.parse(atob(cleanedState));
+                    console.log('WPSMD: Final decoded state data:', stateData);
+                } catch (e) {
+                    console.warn('WPSMD: Final state validation failed:', e);
+                }
+                
             } catch (e) {
                 console.warn('WPSMD: State parameter decoding error:', e);
                 return state; // Return original if decoding fails
             }
+            
             return cleanedState;
         }
 
         // Log request parameters for debugging
+        let cleanedState;
+        try {
+            cleanedState = cleanStateParameter(state);
+            // Validate the cleaned state can be properly decoded
+            const testDecode = JSON.parse(atob(cleanedState));
+            console.log('WPSMD: Validated cleaned state:', testDecode);
+        } catch (e) {
+            console.error('WPSMD: Failed to validate cleaned state, using original:', e);
+            cleanedState = state; // Fall back to original state if cleaning fails
+        }
+
         const requestData = {
             action: 'wpsmd_verify_gsc',
             nonce: wpsmdAnalytics.nonce,
             code: authCode,
-            state: cleanStateParameter(state)
+            state: cleanedState,
+            debug_info: {
+                original_state: state,
+                cleaned_state: cleanedState,
+                url: window.location.href
+            }
         };
         console.log('WPSMD: Sending request with data:', requestData);
 
@@ -239,7 +322,30 @@
 
                 // Add specific guidance for 400 Bad Request
                 if (jqXHR.status === 400) {
-                    details = 'This might be due to an invalid OAuth state parameter or expired authorization. Please try authenticating again.';
+                    console.log('WPSMD: Analyzing 400 error response:', {
+                        responseText: jqXHR.responseText,
+                        state: state,
+                        authCode: authCode
+                    });
+
+                    // Check for specific error conditions
+                    if (jqXHR.responseText.includes('state parameter')) {
+                        details = 'The OAuth state parameter appears to be invalid or corrupted. This could be due to:\
+' +
+                                 '1. Browser encoding issues with special characters\
+' +
+                                 '2. URL truncation or modification during redirect\
+' +
+                                 '3. Session expiration\
+\n' +
+                                 'Please try clearing your browser cache and cookies, then authenticate again.';
+                    } else if (jqXHR.responseText.includes('redirect_uri_mismatch')) {
+                        details = 'The redirect URI does not match the one configured in your Google Cloud Console. \
+' +
+                                 'Please ensure the redirect URI https://unlockthemove.com/wp-admin/admin-ajax.php is properly configured.';
+                    } else {
+                        details = 'This might be due to an invalid OAuth state parameter or expired authorization. Please try authenticating again.';
+                    }
                 }
 
                 showNotice(errorMessage, 'error', details);
