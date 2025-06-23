@@ -397,7 +397,8 @@ class WPSMD_Frontend {
                 }
             }
 
-            if ( ! empty( $schema['description'] ) ) {
+            // Print JSON-LD if schema is not empty (removed description check as it's not always required)
+            if ( ! empty( $schema ) ) {
                 echo '<script type="application/ld+json">' . wp_json_encode( $schema, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT ) . '</script>' . "\n";
             }
         }
