@@ -174,6 +174,10 @@ class WPSMD_Analytics {
      */
     public function verify_search_console() {
         error_log('WPSMD: Starting verify_search_console');
+                    error_log('WPSMD: Raw state parameter: ' . (isset($_GET['state']) ? $_GET['state'] : 'not set'));
+                    error_log('WPSMD: Request URL: ' . $_SERVER['REQUEST_URI']);
+                    error_log('WPSMD: Current site URL: ' . site_url());
+                    error_log('WPSMD: Current home URL: ' . home_url());
         
         if (!check_ajax_referer('wpsmd_analytics_nonce', 'nonce', false)) {
             error_log('WPSMD: Nonce verification failed');
@@ -271,7 +275,7 @@ class WPSMD_Analytics {
                 'action' => 'wpsmd_verify_gsc',
                 'page' => 'wpsmd-analytics',
                 'timestamp' => time(),
-                'site_url' => rtrim(site_url(), ',')
+                'site_url' => rtrim(untrailingslashit(site_url()), ',/')
             );
             
             // Verify all values are properly encoded strings
@@ -546,15 +550,21 @@ class WPSMD_Analytics {
                     error_log(sprintf('WPSMD: Time difference: %d seconds (max allowed: %d)', $time_diff, $max_age));
                     
                     // Validate site URL matches
-                    $site_url = rtrim($state_data['site_url'], '/');
-                    $current_site_url = rtrim(get_site_url(), '/');
+                    $site_url = rtrim(untrailingslashit($state_data['site_url']), ',/');
+                    $current_site_url = rtrim(untrailingslashit(get_site_url()), ',/');
                     
                     if ($site_url !== $current_site_url) {
-                        error_log(sprintf('WPSMD: Site URL mismatch. Expected: %s, Got: %s', 
-                            $current_site_url, $site_url));
+                        error_log('WPSMD: Site URL mismatch in validation.');                        error_log('WPSMD: Expected (normalized): ' . $current_site_url);                        error_log('WPSMD: Got (normalized): ' . $site_url);                        error_log('WPSMD: Original site_url from state: ' . $state_data['site_url']);
                         wp_send_json_error(array(
                             'message' => __('Invalid site URL in state parameter. Please ensure you are on the correct site.', 'wp-seo-meta-descriptions'),
-                            'details' => 'Site URL mismatch'
+                            'details' => 'Site URL mismatch',
+                            'debug_info' => array(
+                                'expected_url' => $current_site_url,
+                                'received_url' => $site_url,
+                                'original_url' => $state_data['site_url'],
+                                'raw_state' => $state,
+                                'decoded_state' => $state_data
+                            )
                         ));
                         return;
                     }
@@ -582,9 +592,18 @@ class WPSMD_Analytics {
                     }
                     
                     // Verify site URL matches
-                    if (!isset($state['site_url']) || $state['site_url'] !== site_url()) {
-                        error_log('WPSMD: Site URL mismatch. Expected: ' . site_url() . ', Got: ' . ($state['site_url'] ?? 'not set'));
-                        wp_send_json_error(array('message' => __('Invalid site URL in state. Please try again.', 'wp-seo-meta-descriptions')));
+                    if (!isset($state['site_url']) || rtrim(untrailingslashit($state['site_url']), ',/') !== rtrim(untrailingslashit(site_url()), ',/')) {
+                        error_log('WPSMD: Site URL mismatch. Expected: ' . rtrim(untrailingslashit(site_url()), ',/') . ', Got: ' . (isset($state['site_url']) ? rtrim(untrailingslashit($state['site_url']), ',/') : 'not set'));
+                        wp_send_json_error(array(
+                            'message' => __('Invalid site URL in state. Please try again.', 'wp-seo-meta-descriptions'),
+                            'details' => 'Site URL mismatch in secondary validation',
+                            'debug_info' => array(
+                                'expected_url' => rtrim(untrailingslashit(site_url()), ',/'),
+                                'received_url' => isset($state['site_url']) ? rtrim(untrailingslashit($state['site_url']), ',/') : 'not set',
+                                'original_url' => $state['site_url'] ?? 'not set',
+                                'raw_state' => $state
+                            )
+                        ));
                         return;
                     }
                     
