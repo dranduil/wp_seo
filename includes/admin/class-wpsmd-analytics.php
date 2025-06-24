@@ -235,7 +235,7 @@ class WPSMD_Analytics {
             // Set redirect URI to admin-ajax.php endpoint
             // IMPORTANT: This exact URL must be added to authorized redirect URIs in Google Cloud Console
             $protocol = is_ssl() ? 'https://' : 'http://';
-            $redirect_uri = $protocol . $_SERVER['HTTP_HOST'] . '/wp-admin/admin-ajax.php';
+            $redirect_uri = untrailingslashit($protocol . rtrim($_SERVER['HTTP_HOST'], ',') . '/wp-admin/admin-ajax.php');
             error_log('WPSMD: Setting redirect URI: ' . $redirect_uri);
             
             // Store the redirect URI for reference
@@ -256,12 +256,13 @@ class WPSMD_Analytics {
             error_log('WPSMD: - is_ssl(): ' . (is_ssl() ? 'true' : 'false'));
             
             // Log the redirect URI and server environment for debugging
-            error_log('WPSMD: Using redirect URI: ' . $redirect_uri);
+            error_log('WPSMD: Using redirect URI: ' . rtrim($redirect_uri, ','));
             error_log('WPSMD: Current SSL status: ' . (is_ssl() ? 'true' : 'false'));
             error_log('WPSMD: Server protocol: ' . (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) ? $_SERVER['HTTP_X_FORWARDED_PROTO'] : $_SERVER['REQUEST_SCHEME']));
-            error_log('WPSMD: Site URL: ' . site_url());
-            error_log('WPSMD: Home URL: ' . home_url());
+            error_log('WPSMD: Site URL: ' . rtrim(site_url(), ','));
+            error_log('WPSMD: Home URL: ' . rtrim(home_url(), ','));
             
+            $redirect_uri = rtrim($redirect_uri, ',');
             $client->setRedirectUri($redirect_uri);
             
             // Add state parameter to track the original request
@@ -270,7 +271,7 @@ class WPSMD_Analytics {
                 'action' => 'wpsmd_verify_gsc',
                 'page' => 'wpsmd-analytics',
                 'timestamp' => time(),
-                'site_url' => site_url()
+                'site_url' => rtrim(site_url(), ',')
             );
             
             // Verify all values are properly encoded strings
@@ -617,7 +618,7 @@ class WPSMD_Analytics {
                         
                         // Use the same redirect URI format as authorization
                         $protocol = is_ssl() ? 'https://' : 'http://';
-                        $redirect_uri = $protocol . $_SERVER['HTTP_HOST'] . '/wp-admin/admin-ajax.php';
+            $redirect_uri = untrailingslashit($protocol . rtrim($_SERVER['HTTP_HOST'], ',') . '/wp-admin/admin-ajax.php');
                         $client->setRedirectUri($redirect_uri);
                         
                         // Verify the redirect URI matches exactly
