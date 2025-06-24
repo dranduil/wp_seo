@@ -1,15 +1,6 @@
 (function($) {
     'use strict';
 
-    // Helper function to mimic PHP's strtr for character-by-character replacement
-    function strtr(str, from, to) {
-        const map = {};
-        for (let i = 0; i < from.length; i++) {
-            map[from[i]] = to[i];
-        }
-        return str.split('').map(char => map[char] || char).join('');
-    }
-
     // Initialize the analytics dashboard
     function initAnalytics() {
         bindEvents();
@@ -36,12 +27,7 @@
             type: 'POST',
             data: {
                 action: 'wpsmd_disconnect_gsc',
-                state: btoa(JSON.stringify({
-                    nonce: wpsmdAnalytics.nonce,
-                    action: 'disconnect',
-                    timestamp: Math.floor(Date.now() / 1000),
-                    site_url: window.location.origin
-                })).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
+                nonce: wpsmdAnalytics.nonce
             },
             success: function(response) {
                 console.log('WPSMD: Disconnect response:', response);
@@ -150,25 +136,22 @@
             // Log the complete URL and query parameters
             console.log('WPSMD: Complete callback URL:', window.location.href);
             console.log('WPSMD: All URL parameters:', Object.fromEntries(urlParams.entries()));
-
-            if (!state) {
-                console.error('WPSMD: Empty state parameter');
-                throw new Error('Empty state parameter');
-            }
-
+            
             // Validate state parameter format
             try {
                 // Convert URL-safe base64 to standard base64
-                let stateData;
-                let decoded;
                 try {
-                    // Replace URL-safe characters with standard base64 characters
-                    let standardBase64 = strtr(state, '-_', '+/');
+                    // Replace URL-safe characters and restore padding if needed
+                    let standardBase64 = state.replace(/-/g, '+').replace(/_/g, '/');
+                    const padding = standardBase64.length % 4;
+                    if (padding) {
+                        standardBase64 += '='.repeat(4 - padding);
+                    }
                     console.log('WPSMD: Converted to standard base64:', standardBase64);
 
                     // Attempt to decode
-                    decoded = atob(standardBase64);
-                    console.log('WPSMD: Base64 decoded:', decoded);
+                    const decoded = atob(standardBase64);
+                    console.log('WPSMD: Base64 decoded result length:', decoded.length);
 
                     // Parse JSON
                     stateData = JSON.parse(decoded);
@@ -176,16 +159,13 @@
                         nonce: stateData.nonce ? 'present' : 'missing',
                         action: stateData.action,
                         timestamp: stateData.timestamp,
-                        site_url: stateData.site_url ? 'present' : 'missing',
-                        raw_state: state,
-                        standard_base64: standardBase64,
-                        decoded_json: decoded
+                        site_url: stateData.site_url ? 'present' : 'missing'
                     });
                 } catch (e) {
                     console.error('WPSMD: State parameter processing failed:', {
                         error: e.message,
                         type: e.name,
-                        state: state
+                        decodedLength: decoded ? decoded.length : 0
                     });
                     throw new Error(`Failed to process state parameter: ${e.message}`);
                 }
@@ -358,21 +338,9 @@
         }
 
         // Prepare request data
-        const requestData = {
-            action: 'wpsmd_verify_gsc',
-            code: authCode,
-            state: state // Use the original state from the callback
-        };
-
-        console.log('WPSMD: Preparing AJAX request:', {
-            requestData: requestData,
-            currentUrl: window.location.href,
-            stateData: stateData // Log the parsed state data
-        });
-
         // Send AJAX request
         $.ajax({
-            url: wpsmdAnalytics.ajax_url,
+            url: wpsmdAnalytics.ajaxurl,
             type: 'POST',
             data: requestData,
             beforeSend: function() {
@@ -405,16 +373,16 @@
             }
         });
 
-        // Removed duplicate requestData definition
-            // Add debug logging
-        console.log('WPSMD: Verification request sent with:', {
+        const requestData = {
+            action: 'wpsmd_verify_gsc',
+            nonce: wpsmdAnalytics.nonce,
             code: authCode,
-            state: verifyState,
-                originalState: state,
-            timestamp: Math.floor(Date.now() / 1000),
-            url: window.location.href
-        });
-                // Continue with the rest of the verification process
+            state: cleanedState,
+            debug_info: {
+                original_state: state,
+                cleaned_state: cleanedState,
+                url: window.location.href,
+                timestamp: Math.floor(Date.now() / 1000)
             }
         };
 

@@ -515,7 +515,6 @@ class WPSMD_Analytics {
                         return;
                     }
                     error_log('WPSMD: Nonce verification successful');
-                    }
                     error_log('WPSMD: All required fields present in state data');
                     
                     // Validate timestamp format and expiration
@@ -564,7 +563,6 @@ class WPSMD_Analytics {
                     
                     // Store validated state data for further processing
                     $state_json = json_encode($state_data);
-                    }
                     
                     error_log('WPSMD: State JSON string: ' . $state_json);
                     $state = json_decode($state_json, true);
@@ -824,11 +822,6 @@ class WPSMD_Analytics {
                         'redirect_url' => $redirect_url
                     ));
                     return;
-                    
-                    wp_send_json_success(array(
-                        'message' => __('Successfully connected to Google Search Console', 'wp-seo-meta-descriptions'),
-                        'reload' => true
-                    ));
                 } catch (Exception $e) {
                     error_log('WPSMD: Token fetch/verification exception: ' . $e->getMessage());
                     delete_option('wpsmd_gsc_token'); // Clean up failed token
