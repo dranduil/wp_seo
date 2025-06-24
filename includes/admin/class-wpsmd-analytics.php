@@ -32,7 +32,28 @@ class WPSMD_Analytics {
      * Disconnect from Google Search Console.
      */
     public function disconnect_search_console() {
-        check_ajax_referer('wpsmd_analytics_nonce', 'nonce');
+        // Verify nonce from state parameter first
+        if (!isset($_POST['state'])) {
+            wp_send_json_error(array('message' => __('Missing state parameter', 'wp-seo-meta-descriptions')));
+            return;
+        }
+
+        try {
+            $state_data = json_decode(base64_decode(strtr($_POST['state'], '-_', '+/')), true);
+            if (!$state_data || !isset($state_data['nonce'])) {
+                wp_send_json_error(array('message' => __('Invalid state parameter', 'wp-seo-meta-descriptions')));
+                return;
+            }
+
+            // Verify the nonce from state parameter
+            if (!wp_verify_nonce($state_data['nonce'], 'wpsmd_gsc_auth')) {
+                wp_send_json_error(array('message' => __('Invalid nonce in state parameter', 'wp-seo-meta-descriptions')));
+                return;
+            }
+        } catch (Exception $e) {
+            wp_send_json_error(array('message' => __('Error processing state parameter', 'wp-seo-meta-descriptions')));
+            return;
+        }
 
         if (!current_user_can('manage_options')) {
             wp_send_json_error(array('message' => __('Permission denied', 'wp-seo-meta-descriptions')));
@@ -481,6 +502,18 @@ class WPSMD_Analytics {
                             return;
                         }
                     }
+
+                    // Verify the nonce from state parameter
+                    if (!wp_verify_nonce($state_data['nonce'], 'wpsmd_gsc_auth')) {
+                        error_log('WPSMD: Invalid nonce in state parameter');
+                        wp_send_json_error(array(
+                            'message' => __('Invalid security token. Please try the authentication process again.', 'wp-seo-meta-descriptions'),
+                            'details' => 'Invalid nonce'
+                        ));
+                        return;
+                    }
+                    error_log('WPSMD: Nonce verification successful');
+                    }
                     error_log('WPSMD: All required fields present in state data');
                     
                     // Validate timestamp format and expiration
@@ -582,8 +615,8 @@ class WPSMD_Analytics {
                         error_log('WPSMD: Redirect URI: ' . $client->getRedirectUri());
                         error_log('WPSMD: Client ID: ' . substr($client->getClientId(), 0, 8) . '...');
                         
-                        // Always use HTTPS for unlockthemove.com
-                        $redirect_uri = 'https://unlockthemove.com/wp-admin/admin-ajax.php';
+                        // Use dynamic site URL for redirect URI
+                        $redirect_uri = admin_url('admin-ajax.php');
                         $client->setRedirectUri($redirect_uri);
                         
                         // Verify the redirect URI matches exactly

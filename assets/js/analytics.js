@@ -27,7 +27,12 @@
             type: 'POST',
             data: {
                 action: 'wpsmd_disconnect_gsc',
-                nonce: wpsmdAnalytics.nonce
+                state: btoa(JSON.stringify({
+                    nonce: wpsmdAnalytics.nonce,
+                    action: 'disconnect',
+                    timestamp: Math.floor(Date.now() / 1000),
+                    site_url: window.location.origin
+                })).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
             },
             success: function(response) {
                 console.log('WPSMD: Disconnect response:', response);
@@ -136,6 +141,14 @@
             // Log the complete URL and query parameters
             console.log('WPSMD: Complete callback URL:', window.location.href);
             console.log('WPSMD: All URL parameters:', Object.fromEntries(urlParams.entries()));
+
+            // Create a new state parameter for verification
+            const verifyState = btoa(JSON.stringify({
+                nonce: wpsmdAnalytics.nonce,
+                action: 'verify',
+                timestamp: Math.floor(Date.now() / 1000),
+                site_url: window.location.origin
+            })).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
             
             // Validate state parameter format
             try {
@@ -339,9 +352,9 @@
 
         // Prepare request data
         const requestData = {
-            action: 'wpsmd_verify_analytics',
-            code: code,
-            state: cleanedState // Use the validated and URL-decoded state
+            action: 'wpsmd_verify_gsc',
+            code: authCode,
+            state: verifyState
         };
 
         console.log('WPSMD: Preparing AJAX request:', {
@@ -351,7 +364,7 @@
 
         // Send AJAX request
         $.ajax({
-            url: wpsmdAnalytics.ajaxurl,
+            url: wpsmdAnalytics.ajax_url,
             type: 'POST',
             data: requestData,
             beforeSend: function() {
@@ -384,16 +397,16 @@
             }
         });
 
-        const requestData = {
-            action: 'wpsmd_verify_gsc',
-            nonce: wpsmdAnalytics.nonce,
+        // Removed duplicate requestData definition
+            // Add debug logging
+        console.log('WPSMD: Verification request sent with:', {
             code: authCode,
-            state: cleanedState,
-            debug_info: {
-                original_state: state,
-                cleaned_state: cleanedState,
-                url: window.location.href,
-                timestamp: Math.floor(Date.now() / 1000)
+            state: verifyState,
+                originalState: state,
+            timestamp: Math.floor(Date.now() / 1000),
+            url: window.location.href
+        });
+                // Continue with the rest of the verification process
             }
         };
 
