@@ -226,41 +226,19 @@
             });
             
             try {
-                // First URL decode the state parameter
-                let urlDecodedState;
-                try {
-                    urlDecodedState = decodeURIComponent(state);
-                    console.log('WPSMD: URL decoded state:', {
-                        state: urlDecodedState,
-                        length: urlDecodedState.length
-                    });
-                } catch (urlError) {
-                    console.error('WPSMD: URL decode failed:', {
-                        error: urlError,
-                        state: state
-                    });
-                    throw new Error('Invalid URL encoding in state parameter');
-                }
-                
-                // Verify the decoded state contains only valid base64url characters
-                if (!/^[A-Za-z0-9_-]*$/.test(urlDecodedState)) {
-                    console.error('WPSMD: Invalid characters in decoded state');
+                // Verify the state contains only valid base64url characters
+                if (!/^[A-Za-z0-9_-]*$/.test(state)) {
+                    console.error('WPSMD: Invalid characters in state');
                     throw new Error('Invalid characters in state parameter');
                 }
                 
                 // Convert URL-safe base64 to standard base64
-                let standardBase64 = urlDecodedState.replace(/-/g, '+').replace(/_/g, '/');
+                let standardBase64 = state.replace(/-/g, '+').replace(/_/g, '/');
                 
-                // Add padding if needed
-                const padding = standardBase64.length % 4;
-                if (padding) {
-                    standardBase64 += '='.repeat(4 - padding);
-                }
-                
-                console.log('WPSMD: Converted to standard base64:', {
-                    base64: standardBase64,
-                    length: standardBase64.length,
-                    padding: padding
+                console.log('WPSMD: State parameter processing:', {
+                    original_state: state,
+                    standard_base64: standardBase64,
+                    length: standardBase64.length
                 });
 
                 // Attempt base64 decode
@@ -300,8 +278,8 @@
                         throw new Error(`State expired. Time difference: ${timeDiff} seconds`);
                     }
                     
-                    // Return the URL-decoded state if all validation passes
-                    return urlDecodedState;
+                    // Return the original state if all validation passes
+                    return state;
                 } catch (jsonError) {
                     console.error('WPSMD: JSON parse failed:', {
                         error: jsonError,
@@ -312,7 +290,9 @@
             } catch (e) {
                 console.error('WPSMD: State parameter validation failed:', {
                     error: e.message,
-                    originalState: state,
+                    original_state: state,
+                    decoded_data: decoded || null,
+                    standard_base64: standardBase64 || null,
                     stack: e.stack
                 });
                 throw e; // Propagate the error instead of returning invalid state
@@ -330,7 +310,9 @@
         } catch (e) {
             console.error('WPSMD: State validation failed:', {
                 error: e.message,
-                originalState: state
+                original_state: state,
+                cleaned_state: cleanedState || null,
+                validation_error: true
             });
             showNotice(wpsmdAnalytics.i18n.verifyError + ': Invalid state parameter - Please try again', 'error');
             $button.prop('disabled', false).text(originalText);

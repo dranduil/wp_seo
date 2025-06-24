@@ -234,7 +234,7 @@ class WPSMD_Analytics {
                 'https://www.googleapis.com/auth/webmasters.readonly'
             ));
             $client->setAccessType('offline');
-            $client->setPrompt('consent');
+            $client->setPrompt('consent select_account');
             
             // Set redirect URI to admin-ajax.php endpoint
             // IMPORTANT: This exact URL must be added to authorized redirect URIs in Google Cloud Console
