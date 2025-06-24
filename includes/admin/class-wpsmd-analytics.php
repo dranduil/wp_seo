@@ -279,25 +279,32 @@ class WPSMD_Analytics {
                 wp_send_json_error(array('message' => 'Internal server error: Generated invalid JSON'));
                 return;
             }
-            // Generate base64 encoded state
-            $state_base64 = base64_encode($state_json);
-            error_log('WPSMD: Initial base64 state: ' . $state_base64);
+            // Generate base64 encoded state with proper padding
+            $state_base64 = rtrim(base64_encode($state_json), '=');
+            error_log('WPSMD: Initial base64 state (without padding): ' . $state_base64);
             error_log('WPSMD: Initial state JSON: ' . $state_json);
             
-            // Ensure proper base64 padding
-            $padding_length = strlen($state_base64) % 4;
-            if ($padding_length) {
-                $state_base64 .= str_repeat('=', 4 - $padding_length);
-            }
-            
-            // Convert to URL-safe base64
+            // Convert to URL-safe base64 without padding
             $state_base64_urlsafe = strtr($state_base64, '+/', '-_');
-            error_log('WPSMD: URL-safe state parameter generated: ' . $state_base64_urlsafe);
+            error_log('WPSMD: URL-safe state parameter (without padding): ' . $state_base64_urlsafe);
             
-            // Validate the state parameter
+            // URL encode the entire state parameter
+            $state_urlencoded = rawurlencode($state_base64_urlsafe);
+            error_log('WPSMD: URL-encoded state parameter: ' . $state_urlencoded);
+            
+            // Validate the state parameter can be decoded correctly
             try {
-                // Convert back to standard base64
-                $test_base64 = strtr($state_base64_urlsafe, '-_', '+/');
+                // URL decode
+                $test_urldecode = rawurldecode($state_urlencoded);
+                error_log('WPSMD: Test URL decode: ' . $test_urldecode);
+                
+                // Convert URL-safe to standard base64 and add padding
+                $test_base64 = strtr($test_urldecode, '-_', '+/');
+                $padding = strlen($test_base64) % 4;
+                if ($padding) {
+                    $test_base64 .= str_repeat('=', 4 - $padding);
+                }
+                error_log('WPSMD: Test base64 (with padding): ' . $test_base64);
                 error_log('WPSMD: Validation - converted back to standard base64: ' . $test_base64);
                 
                 // Attempt decode
@@ -426,43 +433,102 @@ class WPSMD_Analytics {
 
                 try {
                     error_log('WPSMD: Raw state parameter received: ' . $state);
-                    
-                    // Log the raw state parameter and request details
                     error_log('WPSMD: Full request details:');
                     error_log('WPSMD: REQUEST_URI: ' . $_SERVER['REQUEST_URI']);
-                    error_log('WPSMD: Raw state parameter: ' . $state);
                     
-                    // First, try direct base64 decode without any cleaning
-                    $direct_decode = base64_decode(strtr($state, '-_', '+/'), true);
-                    if ($direct_decode !== false && json_decode($direct_decode)) {
-                        error_log('WPSMD: Direct base64 decode successful');
-                        $base64_state = $state;
-                    } else {
-                        // If direct decode fails, try URL decoding first
-                        error_log('WPSMD: Direct decode failed, trying URL decode');
-                        $decoded_url_state = urldecode($state);
-                        error_log('WPSMD: URL-decoded state: ' . $decoded_url_state);
-                        
-                        // Remove any remaining URL-encoded characters
-                        $cleaned_state = preg_replace('/%[0-9A-F]{2}/i', '', $decoded_url_state);
-                        error_log('WPSMD: Cleaned state: ' . $cleaned_state);
-                        
-                        // Convert URL-safe base64 to standard base64
-                        $base64_state = strtr($cleaned_state, '-_', '+/');
+                    // First URL decode the state parameter
+                    $url_decoded_state = rawurldecode($state);
+                    error_log('WPSMD: URL-decoded state: ' . $url_decoded_state);
+                    
+                    // Convert URL-safe base64 to standard base64 and add padding
+                    $standard_base64 = strtr($url_decoded_state, '-_', '+/');
+                    $padding = strlen($standard_base64) % 4;
+                    if ($padding) {
+                        $standard_base64 .= str_repeat('=', 4 - $padding);
+                    }
+                    error_log('WPSMD: Standard base64 with padding: ' . $standard_base64);
+                    
+                    // Attempt base64 decode
+                    $decoded_data = base64_decode($standard_base64, true);
+                    if ($decoded_data === false) {
+                        wp_send_json_error(array(
+                            'message' => __('Invalid state parameter format. Please try the authentication process again.', 'wp-seo-meta-descriptions'),
+                            'details' => 'Base64 decode failed'
+                        ));
+                        return;
+                    }
+                    error_log('WPSMD: Base64 decode successful, length: ' . strlen($decoded_data));
+                    
+                    // Attempt JSON decode
+                    $state_data = json_decode($decoded_data, true);
+                    if ($state_data === null) {
+                        wp_send_json_error(array(
+                            'message' => __('Invalid state parameter structure. Please try the authentication process again.', 'wp-seo-meta-descriptions'),
+                            'details' => 'JSON decode failed: ' . json_last_error_msg()
+                        ));
+                        return;
+                    }
+                    error_log('WPSMD: JSON decode successful: ' . print_r($state_data, true));
+                    
+                    // Validate required fields in state data
+                    $required_fields = ['nonce', 'action', 'timestamp', 'site_url'];
+                    foreach ($required_fields as $field) {
+                        if (!isset($state_data[$field])) {
+                            wp_send_json_error(array(
+                                'message' => __('Invalid state parameter content. Please try the authentication process again.', 'wp-seo-meta-descriptions'),
+                                'details' => "Missing required field: {$field}"
+                            ));
+                            return;
+                        }
+                    }
+                    error_log('WPSMD: All required fields present in state data');
+                    
+                    // Validate timestamp format and expiration
+                    $timestamp = intval($state_data['timestamp']);
+                    if ($timestamp <= 0) {
+                        wp_send_json_error(array(
+                            'message' => __('Invalid state parameter timestamp. Please try the authentication process again.', 'wp-seo-meta-descriptions'),
+                            'details' => 'Invalid timestamp format'
+                        ));
+                        return;
                     }
                     
-                    // Add padding if necessary
-                    $base64_state = str_pad($base64_state, strlen($base64_state) + ((4 - strlen($base64_state) % 4) % 4), '=');
-                    error_log('WPSMD: Converted to standard base64: ' . $base64_state);
+                    $current_time = time();
+                    $time_diff = abs($current_time - $timestamp);
+                    $max_age = 30 * 60; // 30 minutes
                     
-                    $decoded_state = base64_decode($base64_state, true);
-                    if ($decoded_state !== false) {
-                        error_log('WPSMD: Successfully decoded base64 state');
-                        $state_json = $decoded_state;
-                    } else {
-                        error_log('WPSMD: Failed to decode base64 state');
-                        wp_send_json_error(array('message' => __('Invalid state format. Please try again.', 'wp-seo-meta-descriptions')));
+                    if ($time_diff > $max_age) {
+                        error_log(sprintf('WPSMD: State expired. Current time: %d, State time: %d, Diff: %d seconds', 
+                            $current_time, $timestamp, $time_diff));
+                        wp_send_json_error(array(
+                            'message' => __('Your authentication session has expired. Please try the authentication process again.', 'wp-seo-meta-descriptions'),
+                            'details' => sprintf('State expired. Time difference: %d seconds', $time_diff)
+                        ));
                         return;
+                    }
+                    
+                    error_log('WPSMD: State timestamp validation passed');
+                    error_log(sprintf('WPSMD: Time difference: %d seconds (max allowed: %d)', $time_diff, $max_age));
+                    
+                    // Validate site URL matches
+                    $site_url = rtrim($state_data['site_url'], '/');
+                    $current_site_url = rtrim(get_site_url(), '/');
+                    
+                    if ($site_url !== $current_site_url) {
+                        error_log(sprintf('WPSMD: Site URL mismatch. Expected: %s, Got: %s', 
+                            $current_site_url, $site_url));
+                        wp_send_json_error(array(
+                            'message' => __('Invalid site URL in state parameter. Please ensure you are on the correct site.', 'wp-seo-meta-descriptions'),
+                            'details' => 'Site URL mismatch'
+                        ));
+                        return;
+                    }
+                    
+                    error_log('WPSMD: Site URL validation passed');
+                    error_log('WPSMD: State validation completed successfully');
+                    
+                    // Store validated state data for further processing
+                    $state_json = json_encode($state_data);
                     }
                     
                     error_log('WPSMD: State JSON string: ' . $state_json);

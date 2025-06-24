@@ -226,8 +226,30 @@
             });
             
             try {
+                // First URL decode the state parameter
+                let urlDecodedState;
+                try {
+                    urlDecodedState = decodeURIComponent(state);
+                    console.log('WPSMD: URL decoded state:', {
+                        state: urlDecodedState,
+                        length: urlDecodedState.length
+                    });
+                } catch (urlError) {
+                    console.error('WPSMD: URL decode failed:', {
+                        error: urlError,
+                        state: state
+                    });
+                    throw new Error('Invalid URL encoding in state parameter');
+                }
+                
+                // Verify the decoded state contains only valid base64url characters
+                if (!/^[A-Za-z0-9_-]*$/.test(urlDecodedState)) {
+                    console.error('WPSMD: Invalid characters in decoded state');
+                    throw new Error('Invalid characters in state parameter');
+                }
+                
                 // Convert URL-safe base64 to standard base64
-                let standardBase64 = state.replace(/-/g, '+').replace(/_/g, '/');
+                let standardBase64 = urlDecodedState.replace(/-/g, '+').replace(/_/g, '/');
                 
                 // Add padding if needed
                 const padding = standardBase64.length % 4;
@@ -264,7 +286,22 @@
                         }
                     }
                     
-                    return state; // Return original state if all validation passes
+                    // Validate timestamp
+                    const timestamp = parseInt(stateData.timestamp, 10);
+                    if (isNaN(timestamp) || timestamp <= 0) {
+                        throw new Error('Invalid timestamp format');
+                    }
+                    
+                    const currentTime = Math.floor(Date.now() / 1000);
+                    const timeDiff = Math.abs(currentTime - timestamp);
+                    const maxAge = 30 * 60; // 30 minutes
+                    
+                    if (timeDiff > maxAge) {
+                        throw new Error(`State expired. Time difference: ${timeDiff} seconds`);
+                    }
+                    
+                    // Return the URL-decoded state if all validation passes
+                    return urlDecodedState;
                 } catch (jsonError) {
                     console.error('WPSMD: JSON parse failed:', {
                         error: jsonError,
@@ -300,32 +337,52 @@
             return;
         }
 
-        // Ensure state parameter is properly validated before sending
-        if (!cleanedState) {
-            console.error('WPSMD: Cannot proceed with null or empty state');
-            showNotice(wpsmdAnalytics.i18n.verifyError + ': Invalid state parameter', 'error');
-            $button.prop('disabled', false).text(originalText);
-            return;
-        }
+        // Prepare request data
+        const requestData = {
+            action: 'wpsmd_verify_analytics',
+            code: code,
+            state: cleanedState // Use the validated and URL-decoded state
+        };
 
-        // Verify state parameter format
-        try {
-            // Convert URL-safe base64 to standard base64
-            const standardBase64 = cleanedState.replace(/-/g, '+').replace(/_/g, '/').replace(/=+$/, '');
-            const padding = 4 - (standardBase64.length % 4);
-            const paddedBase64 = standardBase64 + (padding === 4 ? '' : '='.repeat(padding));
-            
-            // Final validation of state parameter
-            const decodedState = JSON.parse(atob(paddedBase64));
-            if (!decodedState.nonce || !decodedState.action || !decodedState.timestamp || !decodedState.site_url) {
-                throw new Error('Invalid state parameter structure');
+        console.log('WPSMD: Preparing AJAX request:', {
+            requestData: requestData,
+            currentUrl: window.location.href
+        });
+
+        // Send AJAX request
+        $.ajax({
+            url: wpsmdAnalytics.ajaxurl,
+            type: 'POST',
+            data: requestData,
+            beforeSend: function() {
+                console.log('WPSMD: Sending AJAX request with data:', requestData);
+            },
+            success: function(response) {
+                if (response.success) {
+                    console.log('WPSMD: Analytics verification successful');
+                    showNotice(wpsmdAnalytics.i18n.verifySuccess, 'success');
+                    setTimeout(function() {
+                        window.location.reload();
+                    }, 1500);
+                } else {
+                    console.error('WPSMD: Analytics verification failed:', response);
+                    const errorMessage = response.data && response.data.message
+                        ? response.data.message
+                        : wpsmdAnalytics.i18n.verifyError;
+                    showNotice(errorMessage, 'error');
+                    $button.prop('disabled', false).text(originalText);
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('WPSMD: AJAX request failed:', {
+                    status: status,
+                    error: error,
+                    response: xhr.responseText
+                });
+                showNotice(wpsmdAnalytics.i18n.verifyError + ': ' + error, 'error');
+                $button.prop('disabled', false).text(originalText);
             }
-        } catch (e) {
-            console.error('WPSMD: Final state validation failed:', e);
-            showNotice(wpsmdAnalytics.i18n.verifyError + ': State parameter validation failed', 'error');
-            $button.prop('disabled', false).text(originalText);
-            return;
-        }
+        });
 
         const requestData = {
             action: 'wpsmd_verify_gsc',
