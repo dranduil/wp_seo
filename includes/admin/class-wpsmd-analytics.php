@@ -234,13 +234,17 @@ class WPSMD_Analytics {
             
             // Set redirect URI to admin-ajax.php endpoint
             // IMPORTANT: This exact URL must be added to authorized redirect URIs in Google Cloud Console
-            $redirect_uri = 'https://unlockthemove.com/wp-admin/admin-ajax.php';
+            $protocol = is_ssl() ? 'https://' : 'http://';
+            $redirect_uri = $protocol . $_SERVER['HTTP_HOST'] . '/wp-admin/admin-ajax.php';
             error_log('WPSMD: Setting redirect URI: ' . $redirect_uri);
             
+            // Store the redirect URI for reference
+            set_transient('wpsmd_last_redirect_uri', $redirect_uri, HOUR_IN_SECONDS);
+            
             // Verify we're using HTTPS in production
-            if (strpos($redirect_uri, 'https://') !== 0) {
-                error_log('WPSMD: Error - Redirect URI must use HTTPS for unlockthemove.com');
-                wp_send_json_error(array('message' => 'Configuration error: HTTPS required'));
+            if (!is_ssl() && !WP_DEBUG) {
+                error_log('WPSMD: Error - HTTPS required for Google OAuth');
+                wp_send_json_error(array('message' => __('HTTPS is required for Google OAuth authentication.', 'wp-seo-meta-descriptions')));
                 return;
             }
             
@@ -251,17 +255,12 @@ class WPSMD_Analytics {
             error_log('WPSMD: - HTTP_X_FORWARDED_PROTO: ' . (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) ? $_SERVER['HTTP_X_FORWARDED_PROTO'] : 'not set'));
             error_log('WPSMD: - is_ssl(): ' . (is_ssl() ? 'true' : 'false'));
             
-            // Double-check the constructed URI matches Google's requirements
-            $expected_uri = 'https://unlockthemove.com/wp-admin/admin-ajax.php';
-            if ($redirect_uri !== $expected_uri) {
-                error_log('WPSMD: Warning - Redirect URI mismatch:');
-                error_log('WPSMD: Constructed URI: ' . $redirect_uri);
-                error_log('WPSMD: Expected URI: ' . $expected_uri);
-                error_log('WPSMD: Server variables: ' . print_r($_SERVER, true));
-            }
-            error_log('WPSMD: Setting redirect URI: ' . $redirect_uri);
+            // Log the redirect URI and server environment for debugging
+            error_log('WPSMD: Using redirect URI: ' . $redirect_uri);
             error_log('WPSMD: Current SSL status: ' . (is_ssl() ? 'true' : 'false'));
             error_log('WPSMD: Server protocol: ' . (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) ? $_SERVER['HTTP_X_FORWARDED_PROTO'] : $_SERVER['REQUEST_SCHEME']));
+            error_log('WPSMD: Site URL: ' . site_url());
+            error_log('WPSMD: Home URL: ' . home_url());
             
             $client->setRedirectUri($redirect_uri);
             
@@ -300,36 +299,23 @@ class WPSMD_Analytics {
                 wp_send_json_error(array('message' => 'Internal server error: Generated invalid JSON'));
                 return;
             }
-            // Generate base64 encoded state with proper padding
-            $state_base64 = rtrim(base64_encode($state_json), '=');
-            error_log('WPSMD: Initial base64 state (without padding): ' . $state_base64);
+            // Generate base64 encoded state
+            $state_base64 = base64_encode($state_json);
+            error_log('WPSMD: Initial base64 state: ' . $state_base64);
             error_log('WPSMD: Initial state JSON: ' . $state_json);
             
-            // Convert to URL-safe base64 without padding
+            // Convert to URL-safe base64
             $state_base64_urlsafe = strtr($state_base64, '+/', '-_');
-            error_log('WPSMD: URL-safe state parameter (without padding): ' . $state_base64_urlsafe);
-            
-            // URL encode the entire state parameter
-            $state_urlencoded = rawurlencode($state_base64_urlsafe);
-            error_log('WPSMD: URL-encoded state parameter: ' . $state_urlencoded);
+            error_log('WPSMD: URL-safe state parameter: ' . $state_base64_urlsafe);
             
             // Validate the state parameter can be decoded correctly
             try {
-                // URL decode
-                $test_urldecode = rawurldecode($state_urlencoded);
-                error_log('WPSMD: Test URL decode: ' . $test_urldecode);
-                
-                // Convert URL-safe to standard base64 and add padding
-                $test_base64 = strtr($test_urldecode, '-_', '+/');
-                $padding = strlen($test_base64) % 4;
-                if ($padding) {
-                    $test_base64 .= str_repeat('=', 4 - $padding);
-                }
-                error_log('WPSMD: Test base64 (with padding): ' . $test_base64);
-                error_log('WPSMD: Validation - converted back to standard base64: ' . $test_base64);
+                // Convert URL-safe to standard base64
+                $test_base64 = strtr($state_base64_urlsafe, '-_', '+/');
+                error_log('WPSMD: Test standard base64: ' . $test_base64);
                 
                 // Attempt decode
-                $test_decode = base64_decode($test_base64, true);
+                $test_decode = base64_decode($test_base64);
                 if ($test_decode === false) {
                     throw new Exception('Base64 decode failed');
                 }
@@ -437,9 +423,13 @@ class WPSMD_Analytics {
             }
 
             // Handle the OAuth 2.0 flow
-            if (isset($_POST['code']) || isset($_GET['code'])) {
-                $auth_code = isset($_POST['code']) ? $_POST['code'] : $_GET['code'];
-                $state = isset($_POST['state']) ? $_POST['state'] : (isset($_GET['state']) ? $_GET['state'] : null);
+            if (isset($_GET['code'])) {
+                $auth_code = $_GET['code'];
+                $state = isset($_GET['state']) ? $_GET['state'] : null;
+                
+                // Log the complete callback URL for debugging
+                error_log('WPSMD: Complete callback URL: ' . (isset($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : 'not set'));
+                error_log('WPSMD: REQUEST_URI: ' . $_SERVER['REQUEST_URI']);
                 
                 error_log('WPSMD: Processing OAuth callback');
                 error_log('WPSMD: Auth code: ' . $auth_code);
@@ -457,24 +447,20 @@ class WPSMD_Analytics {
                     error_log('WPSMD: Full request details:');
                     error_log('WPSMD: REQUEST_URI: ' . $_SERVER['REQUEST_URI']);
                     
-                    // First URL decode the state parameter
-                    $url_decoded_state = rawurldecode($state);
-                    error_log('WPSMD: URL-decoded state: ' . $url_decoded_state);
-                    
-                    // Convert URL-safe base64 to standard base64 and add padding
-                    $standard_base64 = strtr($url_decoded_state, '-_', '+/');
-                    $padding = strlen($standard_base64) % 4;
-                    if ($padding) {
-                        $standard_base64 .= str_repeat('=', 4 - $padding);
-                    }
-                    error_log('WPSMD: Standard base64 with padding: ' . $standard_base64);
+                    // Convert URL-safe base64 to standard base64
+                    $standard_base64 = strtr($state, '-_', '+/');
+                    error_log('WPSMD: Standard base64: ' . $standard_base64);
                     
                     // Attempt base64 decode
-                    $decoded_data = base64_decode($standard_base64, true);
+                    $decoded_data = base64_decode($standard_base64);
                     if ($decoded_data === false) {
                         wp_send_json_error(array(
                             'message' => __('Invalid state parameter format. Please try the authentication process again.', 'wp-seo-meta-descriptions'),
-                            'details' => 'Base64 decode failed'
+                            'details' => 'Base64 decode failed',
+                            'debug_info' => array(
+                                'raw_state' => $state,
+                                'standard_base64' => $standard_base64
+                            )
                         ));
                         return;
                     }
@@ -485,7 +471,14 @@ class WPSMD_Analytics {
                     if ($state_data === null) {
                         wp_send_json_error(array(
                             'message' => __('Invalid state parameter structure. Please try the authentication process again.', 'wp-seo-meta-descriptions'),
-                            'details' => 'JSON decode failed: ' . json_last_error_msg()
+                            'details' => 'JSON decode failed: ' . json_last_error_msg(),
+                            'debug_info' => array(
+                                'raw_state' => $state,
+                                'standard_base64' => $standard_base64,
+                                'decoded_data' => bin2hex($decoded_data),
+                                'json_error' => json_last_error(),
+                                'json_error_msg' => json_last_error_msg()
+                            )
                         ));
                         return;
                     }
@@ -506,8 +499,17 @@ class WPSMD_Analytics {
                     // Verify the nonce from state parameter
                     if (!wp_verify_nonce($state_data['nonce'], 'wpsmd_gsc_auth')) {
                         error_log('WPSMD: Invalid nonce in state parameter');
+                        error_log('WPSMD: State data: ' . print_r($state_data, true));
                         wp_send_json_error(array(
                             'message' => __('Invalid security token. Please try the authentication process again.', 'wp-seo-meta-descriptions'),
+                            'debug_info' => array(
+                                'raw_state' => $state,
+                                'decoded_state' => $state_data,
+                                'nonce' => $state_data['nonce'],
+                                'action' => $state_data['action'],
+                                'timestamp' => $state_data['timestamp'],
+                                'site_url' => $state_data['site_url']
+                            ),
                             'details' => 'Invalid nonce'
                         ));
                         return;
@@ -615,8 +617,9 @@ class WPSMD_Analytics {
                         error_log('WPSMD: Redirect URI: ' . $client->getRedirectUri());
                         error_log('WPSMD: Client ID: ' . substr($client->getClientId(), 0, 8) . '...');
                         
-                        // Use dynamic site URL for redirect URI
-                        $redirect_uri = admin_url('admin-ajax.php');
+                        // Use the same redirect URI format as authorization
+                        $protocol = is_ssl() ? 'https://' : 'http://';
+                        $redirect_uri = $protocol . $_SERVER['HTTP_HOST'] . '/wp-admin/admin-ajax.php';
                         $client->setRedirectUri($redirect_uri);
                         
                         // Verify the redirect URI matches exactly
@@ -671,14 +674,28 @@ class WPSMD_Analytics {
                             // Check for redirect_uri_mismatch
                             if (strpos($e->getMessage(), 'redirect_uri_mismatch') !== false) {
                                 error_log('WPSMD: Detected redirect_uri_mismatch error');
-                                $error_message = 'Redirect URI mismatch. Please ensure the following URI is configured in Google Cloud Console:\n' .
-                                                'https://unlockthemove.com/wp-admin/admin-ajax.php\n\n' .
-                                                'Troubleshooting steps:\n' .
-                                                '1. Go to Google Cloud Console\n' .
-                                                '2. Navigate to APIs & Services > Credentials\n' .
-                                                '3. Edit your OAuth 2.0 Client ID\n' .
-                                                '4. Add or update the authorized redirect URI\n' .
-                                                '5. Ensure it matches exactly (including https:// and no trailing slash)';
+                                $current_uri = admin_url('admin-ajax.php');
+                                $error_message = sprintf(
+                                    'Redirect URI mismatch. Please ensure the following URI is configured in Google Cloud Console:\n\n' .
+                                    'Expected URI: %s\n' .
+                                    'Current URI: %s\n\n' .
+                                    'Troubleshooting steps:\n' .
+                                    '1. Go to Google Cloud Console\n' .
+                                    '2. Navigate to APIs & Services > Credentials\n' .
+                                    '3. Edit your OAuth 2.0 Client ID\n' .
+                                    '4. Add or update the authorized redirect URI\n' .
+                                    '5. Ensure it matches exactly (including https:// and no trailing slash)\n\n' .
+                                    'Debug Info:\n' .
+                                    'Protocol: %s\n' .
+                                    'HTTP_HOST: %s\n' .
+                                    'REQUEST_URI: %s',
+                                    $redirect_uri,
+                                    $client->getRedirectUri(),
+                                    $protocol,
+                                    $_SERVER['HTTP_HOST'],
+                                    $_SERVER['REQUEST_URI']
+                                );
+                                error_log('WPSMD: Current redirect URI: ' . $current_uri);
                             } else {
                                 $error_message = 'Invalid request. Please check the following:\n' .
                                                 '1. Authorization code is valid and not expired\n' .
@@ -710,7 +727,7 @@ class WPSMD_Analytics {
                             }
                         } else if (strpos($error_message, '400') !== false || strpos($error_message, 'redirect_uri_mismatch') !== false) {
                             error_log('WPSMD: 400 Bad Request or redirect_uri_mismatch detected');
-                            error_log('WPSMD: Current redirect URI: ' . $redirect_uri);
+                            error_log('WPSMD: Current redirect URI: ' . $client->getRedirectUri());
                             error_log('WPSMD: Request scheme: ' . $_SERVER['REQUEST_SCHEME']);
                             error_log('WPSMD: HTTP_X_FORWARDED_PROTO: ' . (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) ? $_SERVER['HTTP_X_FORWARDED_PROTO'] : 'not set'));
                             
@@ -721,7 +738,7 @@ class WPSMD_Analytics {
                                 'Redirect URI mismatch. Please configure the following URI exactly in your Google Cloud Console (APIs & Services > Credentials > OAuth 2.0 Client IDs > Authorized redirect URIs):\n\n%s\n\nCurrent configuration issues:\n1. Your redirect URI must match exactly (check for HTTP vs HTTPS)\n2. Remove any trailing slashes or extra parameters\n3. Verify no typos or missing characters\n\nExpected URI format: %s\nCurrent URI: %s',
                                 $expected_uri,
                                 $expected_uri,
-                                $redirect_uri
+                                $client->getRedirectUri()
                             );
                         }
                         
@@ -729,6 +746,12 @@ class WPSMD_Analytics {
                             'message' => sprintf(
                                 __('Error connecting to Google Search Console: %s. Please verify your Google Cloud Console configuration.', 'wp-seo-meta-descriptions'),
                                 $error_message
+                            ),
+                            'debug_info' => array(
+                                'redirect_uri' => $client->getRedirectUri(),
+                                'current_site' => site_url(),
+                                'request_uri' => $_SERVER['REQUEST_URI'],
+                                'error_type' => get_class($e)
                             )
                         ));
                         return;
